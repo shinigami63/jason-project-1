@@ -22,7 +22,7 @@ jobs:
         run: pyinstaller --onefile --add-data "ui.html;." receipt_server.py
 
       - name: Upload EXE
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: kebbet-receipt
           path: dist/receipt_server.exe
