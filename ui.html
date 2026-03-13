@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kebbet Zamen — Receipt</title>
+<style>
+  :root { --red: #c62828; --bg: #f5f5f5; --card: #fff; --border: #e0e0e0; --text: #111; --muted: #888; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); min-height: 100vh; padding: 24px 16px; color: var(--text); }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 20px; }
+  header h1 { font-size: 22px; font-weight: 800; }
+  header h1 span { color: var(--red); }
+  header p { font-size: 13px; color: var(--muted); }
+
+  .paste-card { background: var(--card); border: 2px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .paste-card label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 8px; }
+  textarea { width: 100%; height: 160px; padding: 10px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 12px; font-family: monospace; resize: vertical; background: #fafafa; }
+  textarea:focus { outline: none; border-color: var(--red); }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 22px; border: none; border-radius: 7px; font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity .15s, transform .1s; }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-parse { background: #111; color: #fff; margin-top: 10px; }
+  .btn-print { background: var(--red); color: #fff; margin-top: 16px; width: 100%; justify-content: center; font-size: 15px; padding: 13px; }
+  .btn-add { background: #e8f5e9; color: #2e7d32; border: 1.5px solid #a5d6a7; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; margin-top: 8px; width: 100%; }
+
+  .status { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 18px; }
+  .status.err { color: var(--red); }
+
+  .meta-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; font-size: 13px; }
+  .meta-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .meta-row:last-child { margin-bottom: 0; }
+  .meta-label { color: var(--muted); font-size: 12px; min-width: 90px; }
+  .badge { background: #e65100; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+  .edit-hint { font-size: 10px; color: #bbb; margin-bottom: 8px; text-align: right; }
+
+  [contenteditable] { border-bottom: 1.5px dashed #ccc; min-width: 40px; outline: none; cursor: text; padding: 1px 2px; border-radius: 2px; }
+  [contenteditable]:hover { border-bottom-color: #999; }
+  [contenteditable]:focus { border-bottom-color: var(--red); background: #fff8f8; }
+  .meta-value { font-weight: 700; font-size: 13px; }
+
+  .items-section { display: none; }
+  .item-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .qty-badge { background: #111; color: #fff; font-size: 15px; font-weight: 900; min-width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0 6px; cursor: text; }
+  .item-info { flex: 1; min-width: 0; }
+  .item-ar { font-size: 15px; font-weight: 700; direction: rtl; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+  .item-en { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .comment-input { width: 150px; padding: 7px 9px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 12px; flex-shrink: 0; }
+  .comment-input:focus { outline: none; border-color: var(--red); }
+  .remove-btn { background: none; border: none; color: #ccc; font-size: 20px; cursor: pointer; flex-shrink: 0; line-height: 1; padding: 0 4px; }
+  .remove-btn:hover { color: var(--red); }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Kebbet <span>Zamen</span></h1>
+    <p>Receipt Generator</p>
+  </header>
+
+  <div class="paste-card">
+    <label>Paste Toters order page</label>
+    <textarea id="rawText" placeholder="Copy the entire Toters order page and paste it here..."></textarea>
+    <br>
+    <button class="btn btn-parse" id="parseBtn" onclick="parseOrder()">Parse Order</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="items-section" id="itemsSection">
+    <div class="edit-hint">✏️ Click any field to edit &nbsp;|&nbsp; ✕ to remove item</div>
+    <div class="meta-card" id="metaCard"></div>
+    <div id="itemsList"></div>
+    <button class="btn-add" onclick="addItem()">+ Add Item</button>
+    <button class="btn btn-print" onclick="printReceipt()">🖨️ Print Receipt</button>
+  </div>
+</div>
+
+<script>
+let parsedOrder = null;
+let itemCount = 0;
+
+async function parseOrder() {
+  const text = document.getElementById('rawText').value.trim();
+  if (!text) return;
+  const btn = document.getElementById('parseBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Processing...';
+  status.className = 'status';
+  status.textContent = 'Extracting and translating...';
+  try {
+    const res = await fetch('/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    const data = await res.json();
+    if (data.error) { status.className = 'status err'; status.textContent = '⚠ ' + data.error; return; }
+    parsedOrder = data;
+    renderUI(data);
+    status.textContent = '';
+  } catch (e) {
+    status.className = 'status err';
+    status.textContent = '⚠ Connection failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Parse Order';
+  }
+}
+
+function renderUI(data) {
+  const meta = document.getElementById('metaCard');
+  const sched = data.scheduled ? '<div class="meta-row"><span class="badge">SCHEDULED</span></div>' : '';
+  meta.innerHTML = `
+    ${sched}
+    <div class="meta-row"><span class="meta-label">Customer</span><span class="meta-value" contenteditable id="m-customer">${data.customer}</span></div>
+    <div class="meta-row"><span class="meta-label">Prepare by</span><span class="meta-value" contenteditable id="m-prepare">${data.prepare_by}</span></div>
+    <div class="meta-row"><span class="meta-label">Order #</span><span class="meta-value" contenteditable id="m-order">${data.order_num}</span></div>
+  `;
+
+  itemCount = 0;
+  document.getElementById('itemsList').innerHTML = '';
+  data.items.forEach(item => addItemRow(item));
+  document.getElementById('itemsSection').style.display = 'block';
+}
+
+function addItemRow(item = null) {
+  const i = itemCount++;
+  const qty = item ? item.qty : '1';
+  const ar = item ? item.arabic_name : '';
+  const en = item ? item.name : '';
+  const div = document.createElement('div');
+  div.className = 'item-card';
+  div.id = `item-${i}`;
+  div.innerHTML = `
+    <div class="qty-badge" contenteditable id="qty${i}">${qty}</div>
+    <div class="item-info">
+      <div class="item-ar" contenteditable id="ar${i}">${ar}</div>
+      <div class="item-en" contenteditable id="en${i}">${en}</div>
+    </div>
+    <input type="text" class="comment-input" id="c${i}" placeholder="Kitchen note">
+    <button class="remove-btn" onclick="removeItem(${i})" title="Remove">✕</button>
+  `;
+  document.getElementById('itemsList').appendChild(div);
+}
+
+function addItem() {
+  addItemRow();
+  const list = document.getElementById('itemsList');
+  const last = list.lastElementChild;
+  last.querySelector('[contenteditable]').focus();
+}
+
+function removeItem(i) {
+  const el = document.getElementById(`item-${i}`);
+  if (el) el.remove();
+}
+
+function get(id) {
+  const el = document.getElementById(id);
+  return el ? el.innerText.trim() : '';
+}
+
+async function printReceipt() {
+  if (!parsedOrder) return;
+  const items = [];
+  document.querySelectorAll('.item-card').forEach(card => {
+    const id = card.id.replace('item-', '');
+    const qty = get(`qty${id}`);
+    const ar = get(`ar${id}`);
+    if (!qty || !ar) return;
+    items.push({
+      qty,
+      arabic_name: ar,
+      name: get(`en${id}`),
+      comment: document.getElementById(`c${id}`)?.value.trim() || ''
+    });
+  });
+
+  const payload = {
+    ...parsedOrder,
+    customer: get('m-customer'),
+    prepare_by: get('m-prepare'),
+    order_num: get('m-order'),
+    items
+  };
+  const res = await fetch('/receipt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const html = await res.text();
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+</script>
+</body>
+</html>
