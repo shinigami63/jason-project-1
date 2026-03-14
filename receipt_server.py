@@ -143,7 +143,16 @@ def parse():
 
 @app.route('/receipt', methods=['POST'])
 def receipt():
-    return build_receipt(request.json)
+    try:
+        html = build_receipt(request.json)
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.html', mode='w', encoding='utf-8')
+        tmp.write(html)
+        tmp.close()
+        os.startfile(tmp.name)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
 
 def build_receipt(d):
     rows = ''
