@@ -187,7 +187,7 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 .info{{padding:3mm 0;border-bottom:1px dashed #000}}
 .ir{{display:flex;justify-content:space-between;margin-bottom:1.5mm;font-size:11px}}
 .il{{color:#000}}
-.iv{{font-weight:700;font-size:13px}}
+.iv{{font-weight:900;font-size:16px}}
 .ih{{background:#000;color:#fff;text-align:center;padding:1.5mm;font-size:12px;font-weight:700;margin:2mm 0 0}}
 .item{{padding:2.5mm 0;border-bottom:1px dotted #000}}
 .row{{display:flex;align-items:center;gap:2mm}}
