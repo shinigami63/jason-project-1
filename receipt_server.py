@@ -1,10 +1,10 @@
+import threading, webview, os, sys
 from flask import Flask, request, jsonify
-import re, json, urllib.request, urllib.parse, os
+import re, json, urllib.request, urllib.parse
 
 app = Flask(__name__)
 
 DICTIONARY = {
-    # COLD MEZZA
     "hummus": "حمص",
     "moutabbal": "متبل",
     "eggplant raheb": "باذنجان الراهب",
@@ -18,7 +18,6 @@ DICTIONARY = {
     "makdous": "مكدوس",
     "pickles": "مخلل",
     "vegetables": "خضار",
-    # HOT MEZZA
     "hummus with meat": "حمص باللحمة",
     "hummus babla": "حمص بيلة",
     "french fries": "بطاطا مقلية",
@@ -29,7 +28,6 @@ DICTIONARY = {
     "ras asfour": "رأس عصفور",
     "goat liver": "كبدة ماعز",
     "chicken liver in pomegranate molasses": "كبدة دجاج بدبس الرمان",
-    # SALADS
     "tabbouleh": "تبولة",
     "tabboule": "تبولة",
     "fattouch": "فتوش",
@@ -38,7 +36,6 @@ DICTIONARY = {
     "tomatoes and onions salad": "سلطة بندورة وبصل",
     "cucumber in laban": "خيار بلبن",
     "oriental salad": "سلطة عربية",
-    # RAW MEATS
     "raw kibbeh": "كبة نية",
     "raw kebbeh": "كبة نية",
     "kebbeh nayeh": "كبة نية",
@@ -49,11 +46,9 @@ DICTIONARY = {
     "raw liver": "كبدة نية",
     "raw kafta": "كفتة نية",
     "raw fitle": "فتلة نية",
-    # FATTEH
     "fatteh makadem": "فتة مقادم",
     "fatteh hummus": "فتة حمص",
     "fatteh lsenet": "فتة لسانات",
-    # CUISINE ZAMEN
     "meat stuffed vine leaves & zucchini with cutlets": "ورق عنب وكوسا محشية مع كستلاتة",
     "meat stuffed vine leaves & zucchini": "ورق عنب وكوسا محشية",
     "meat stuffed vine leaves": "ورق عنب محشي باللحمة",
@@ -70,7 +65,6 @@ DICTIONARY = {
     "nikhaat": "نخاعات",
     "makadem": "مقادم",
     "nifa": "نيفا",
-    # FROM THE GRILL
     "taouk skewers": "أسياخ طاووق",
     "grilled kafta": "كفتة مشوية",
     "kafta": "كفتة",
@@ -78,7 +72,6 @@ DICTIONARY = {
     "arayes kafta": "عرايس كفتة",
     "mixed grill": "مشاوي مشكلة",
     "shish taouk": "شيش طاووق",
-    # KEBBEH
     "kebbeh zghertawiye": "كبة زغرتاوية",
     "kebbeh zghertewiye stuffed with fat": "كبة بالدهن",
     "kebbeh zghertewiye stuffed with meat": "كبة باللحمة",
@@ -88,7 +81,6 @@ DICTIONARY = {
     "baked meat stuffed kebbeh in a tray": "كبة بالصينية باللحمة",
     "baked kebbeh with onions in a tray": "كبة بالصينية بالبصل",
     "baked kebbeh in oil in a tray": "كبة بالزيت بالصينية",
-    # MOUAJANAT
     "mini kebbeh empty": "كبة فارغة",
     "mini kebbeh stuffed with meat": "كبة محشية باللحمة",
     "sambousek": "سمبوسك",
@@ -96,7 +88,6 @@ DICTIONARY = {
     "rkakat cheese": "رقاقات جبنة",
     "kebbeh pumpkin": "كبة لقطين",
     "shish barak pack": "شيش برك",
-    # DESSERTS
     "smidiyeh": "سميدية",
     "mafrouket festo2": "مفروكة فستق",
     "mafrouket fistok": "مفروكة فستق",
@@ -130,10 +121,14 @@ def translate_items(items):
         item['arabic_name'] = translate_word(item['name'])
     return items
 
+def get_ui_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, 'ui.html')
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ui.html')
+
 @app.route('/')
 def index():
-    ui_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ui.html')
-    with open(ui_path, encoding='utf-8') as f:
+    with open(get_ui_path(), encoding='utf-8') as f:
         return f.read()
 
 @app.route('/parse', methods=['POST'])
@@ -153,10 +148,6 @@ def receipt():
 def build_receipt(d):
     rows = ''
     for item in d['items']:
-        parts = []
-        if item.get('variant'):    parts.append(item['variant'])
-        if item.get('preference'): parts.append(item['preference'])
-        detail = f'<div class="det" dir="ltr">{" · ".join(parts)}</div>' if parts else ''
         note = f'<div class="note">← {item["comment"]}</div>' if item.get('comment') else ''
         rows += f'''
         <div class="item">
@@ -164,7 +155,7 @@ def build_receipt(d):
             <span class="qty">{item["qty"]}</span>
             <span class="iname">{item["arabic_name"]}</span>
           </div>
-          {detail}{note}
+          {note}
         </div>'''
 
     sched = '<div class="sched">مجدول ⏰</div>' if d.get('scheduled') else ''
@@ -179,20 +170,20 @@ def build_receipt(d):
 @page{{size:72mm auto;margin:0}}
 body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;font-size:11px;direction:rtl}}
 .r{{padding:4mm}}
-.hd{{text-align:center;padding-bottom:3mm;border-bottom:2px dashed #333}}
+.hd{{text-align:center;padding-bottom:3mm;border-bottom:2px dashed #000}}
 .logo{{font-size:20px;font-weight:900}}
-.br{{font-size:12px;font-weight:600;margin-top:1mm}}.toters{{font-size:18px;font-weight:900;color:#000;margin-top:2mm;letter-spacing:3px}}
-.sched{{background:#e65100;color:#fff;text-align:center;padding:1mm;font-size:11px;font-weight:700;margin-top:1mm;border-radius:2px}}
-.info{{padding:3mm 0;border-bottom:1px dashed #aaa}}
+.br{{font-size:12px;font-weight:600;margin-top:1mm}}
+.toters{{font-size:18px;font-weight:900;color:#000;margin-top:2mm;letter-spacing:3px}}
+.sched{{background:#000;color:#fff;text-align:center;padding:1mm;font-size:11px;font-weight:700;margin-top:1mm}}
+.info{{padding:3mm 0;border-bottom:1px dashed #000}}
 .ir{{display:flex;justify-content:space-between;margin-bottom:1.5mm;font-size:11px}}
 .il{{color:#000}}
 .iv{{font-weight:700;font-size:13px}}
-.ih{{background:#111;color:#fff;text-align:center;padding:1.5mm;font-size:12px;font-weight:700;margin:2mm 0 0}}
-.item{{padding:2.5mm 0;border-bottom:1px dotted #ccc}}
+.ih{{background:#000;color:#fff;text-align:center;padding:1.5mm;font-size:12px;font-weight:700;margin:2mm 0 0}}
+.item{{padding:2.5mm 0;border-bottom:1px dotted #000}}
 .row{{display:flex;align-items:center;gap:2mm}}
-.qty{{background:#111;color:#fff;font-weight:900;font-size:16px;padding:0 2mm;border-radius:2px;flex-shrink:0;min-width:8mm;text-align:center}}
+.qty{{background:#000;color:#fff;font-weight:900;font-size:16px;padding:0 2mm;border-radius:2px;flex-shrink:0;min-width:8mm;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .iname{{font-weight:700;font-size:16px}}
-.det{{font-size:10px;color:#000;margin-top:.5mm;margin-right:6mm}}
 .note{{font-size:10px;color:#000;font-style:italic;margin-top:.5mm;margin-right:6mm;border-right:2px solid #000;padding-right:1.5mm}}
 .ft{{text-align:center;margin-top:4mm;padding-top:3mm;border-top:2px dashed #000;font-size:10px;color:#000}}
 .ft b{{font-size:13px;color:#000}}
@@ -217,5 +208,19 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 <script>window.onload=()=>window.print()</script>
 </body></html>'''
 
+def run_flask():
+    app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    t = threading.Thread(target=run_flask, daemon=True)
+    t.start()
+    import time
+    time.sleep(1)
+    webview.create_window(
+        'Kebbet Zamen — Receipt',
+        'http://127.0.0.1:5001',
+        width=800,
+        height=700,
+        resizable=True
+    )
+    webview.start()
