@@ -1,123 +1,153 @@
 import threading, webview, os, sys
 from flask import Flask, request, jsonify
-import re, json, urllib.request, urllib.parse
+import json, urllib.request, urllib.parse
 
 app = Flask(__name__)
 
-DICTIONARY = {
-   "Beirut Beer Light": "بيرة بيروت لايت",
-"Beirut Beer": "بيرة بيروت",
-"Mezza Beer": "بيرة مزة",
-"Iced Tea": "شاي مثلج",
-"Rim Sparkling Water": "مياه ريم الغازية",
-"Soft Drinks": "مشروبات غازية",
-"Tannourine Water": "مياه تنورين",
-"Hindbeh Dandelion Greens": "هندبة",
-"Moutabbal": "متبل",
-"Pickles": "مخللات",
-"Vegetables": "خضار",
-"Raheb Eggplant": "راهب",
-"Goat Labneh": "لبنة ماعز",
-"Makdous (3 To 4 Pieces)": "مكدوس",
-"Shanklish": "شنكليش",
-"Mouhammara": "محمرة",
-"Jebne Darfiyeh": "جبنة ضرفية",
-"Yogurt": "لبن",
-"Vine Leaves In Oil": "ورق عريش بالزيت",
-"Hummus": "حمص",
-"Nifa": "نيفة",
-"Lsenet": "لسانات",
-"Nkhahaat": "نخاعات",
-"Kebbeh Labanieh Zghertewiye": "كبة لبنية زغرتاوية",
-"Makadem": "مقادم",
-"Meat Stuffed Vine Leaves & Zuchini With Cutlets": "ورق عريش وكوسا محشي مع كستلاتة",
-"Meat Stuffed Vine Leaves & Zuchini": "ورق عريش وكوسا محشي",
-"Fried Fawaregh": "فوارغ مقلية",
-"Shish Barak": "شيش برك",
-"Kebbeh & Shish Barak With Laban": "كبة وشيش برك باللبن",
-"Meat Stuffed Vine Leaves": "ورق عريش محشي",
-"Fawaregh": "فوارغ",
-"Carob Molasses": "دبس الخروب",
-"Smidiyeh": "سميدية",
-"Halewe": "حلاوة",
-"Biscuits & Raha": "بسكويت وراحة",
-"Hummus Fatteh": "فتة حمص",
-"Lsenet Fatteh": "فتة لسانات",
-"Makadem Fatteh": "فتة مقادم",
-"Grilled Kafta": "كفتة مشوية",
-"Taouk": "تاووك",
-"Grilled Meat": "لحم مشوي",
-"Mixed Grills": "مشاوي مشكلة",
-"Arayes Kafta": "عرايس كفتة",
-"Ras Asfour": "لحمة رأس عصفور",
-"Soujouk": "سجق",
-"Chicken Liver In Pomegranate Molasses": "سودة دجاج بدبس الرمان",
-"Makanek": "مقانق",
-"Hummus With Meat": "حمص باللحم",
-"Hummus Balila": "حمص بليلة",
-"Goat Liver": "سودة ماعز مقلي",
-"French Fries": "بطاطا مقلية",
-"Potatoes With Garlic & Coriander": "بطاطا بالثوم والكزبرة",
-"Kebbeh Zghertawiye": "كبة زغرتاوية",
-"Kebbeh Sajiyeh": "كبة صاجية",
-"Kebbeh With Oil": "كبة بالزيت",
-"Baked Kebbeh With Onions In A Tray": "كبة بالصينية مع بصل و صنوبر",
-"Baked Meat Stuffed Kebbeh In A Tray": "كبة محشية بالصينية",
-"Sambousek": "سمبوسك",
-"Cheese Rakakat": "رقاقات جبنة",
-"Sambousek Stuffed With Cheese": "سمبوسك بالجبنة",
-"Pumpkin Kebbeh": "كبة لقطين",
-"Mini Kebbeh Stuffed With Meat": "كباكيب محشي",
-"Mini Empty Kebbeh": "كباكيب فارغ",
-"Moughrabieh": "مغربية",
-"Aadas Bi Hamoud": "عدس بحامض",
-"Kharouf Mehche": "خروف محشي",
-"Mloukhieh Djej & Rice": "ملوخية دجاج وأرز",
-"Lentil Soup": "شوربة عدس",
-"Pumpkin Kebbeh In A Tray": "كبة لقطين بالصينية",
-"Bacha w Assekrou": "باشا وعسكرو",
-"Spaghetti Bachchamel": "سباغيتي بشاميل",
-"Laban Emmo & Rice": "لبن إمه وأرز",
-"Kebbeh Bil Labneh": "كبة باللبنة",
-"Borghol aA Banadoura": "برغل على بندورة",
-"Bazella Bil Lahme & Rice": "بازيلا باللحمة وأرز",
-"Daoud Bacha & Rice": "داود باشا وأرز",
-"Oriental Rice": "أرز شرقي",
-"Tajen Samak": "طاجن سمك",
-"Loubiyeh Bi Lahme & Rice": "لوبية باللحمة وأرز",
-"Loubieh Bi Zeit": "لوبية بالزيت",
-"Labniye W Shish Barak": "لبنية وشيش برك",
-"Bamieh Bil Lahme & Rice": "بامية باللحمة وأرز",
-"Koussa Bil Laban": "كوسا باللبن",
-"Moujadara Bi Adas": "مجدرة بالعدس",
-"Frikeh Djej": "فريكة دجاج",
-"Djej W Batata Bil Forn": "دجاج وبطاطا بالفرن",
-"Kafta Bil Sayniyeh & Rice": "كفتة بالصينية وأرز",
-"Spaghetti Bi Laban": "سباغيتي باللبن",
-"Fassoulia Bi Lahme & Rice": "فاصوليا باللحمة وأرز",
-"Kebbeh Arnabieh & Rice": "كبة أرنبية وأرز",
-"Maqloubeh Aubergines": "مقلوبة باذنجان",
-"Mehchi Malfouf": "محشي ملفوف",
-"Riz Aa Djej": "أرز على دجاج",
-"Mousakaa Aubergines": "مسقعة باذنجان",
-"Hrisse": "هريسة",
-"Moujadara Zghertewiye": "مجدرة زغرتاوية",
-"Siyadiyeh": "صيادية",
-"Raw Liver": "سودة نية",
-"Raw Orfali": "أورفلية",
-"Raw Tebleh": "تابلة",
-"Raw Habra": "هبرة",
-"Raw Kafta": "كفتة نية",
-"Raw Ftile": "فتيلة نية",
-"Raw Kebbeh": "كبة نية",
-"Cabbage Salad": "سلطة ملفوف",
-"Fattouch": "فتوش",
-"Oriental Salad": "سلطة عربية",
-"Tabbouleh": "تبولة",
-"Tomatoes & Onions Salad": "سلطة بندورة وبصل",
-"Cucumber With Laban": "خيار باللبن",
+# ── Paths ────────────────────────────────────────────────────────────────────
+def get_data_path(filename):
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), filename)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+
+def get_ui_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, 'ui.html')
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ui.html')
+
+# ── Default dictionary ────────────────────────────────────────────────────────
+DEFAULT_DICTIONARY = {
+    "hummus": "حمص",
+    "moutabbal": "متبل",
+    "eggplant raheb": "باذنجان الراهب",
+    "mohamara": "محمرة",
+    "goat labneh": "لبنة ماعز",
+    "labneh": "لبنة",
+    "shanklish": "شنكليش",
+    "vine leaves in oil": "ورق عنب بالزيت",
+    "hindbeh dandelion greens": "هندبة بالزيت",
+    "hindbeh": "هندبة",
+    "makdous": "مكدوس",
+    "pickles": "مخلل",
+    "vegetables": "خضار",
+    "hummus with meat": "حمص باللحمة",
+    "hummus babla": "حمص بيلة",
+    "french fries": "بطاطا مقلية",
+    "potatoes with garlic & coriander": "بطاطا بالثوم والكزبرة",
+    "potatoes with garlic and coriander": "بطاطا بالثوم والكزبرة",
+    "soujou": "سجق",
+    "sausages": "نقانق",
+    "ras asfour": "رأس عصفور",
+    "goat liver": "كبدة ماعز",
+    "chicken liver in pomegranate molasses": "كبدة دجاج بدبس الرمان",
+    "tabbouleh": "تبولة",
+    "tabboule": "تبولة",
+    "fattouch": "فتوش",
+    "fattoush": "فتوش",
+    "cabbage salad": "سلطة ملفوف",
+    "tomatoes and onions salad": "سلطة بندورة وبصل",
+    "cucumber in laban": "خيار بلبن",
+    "oriental salad": "سلطة عربية",
+    "raw kibbeh": "كبة نية",
+    "raw kebbeh": "كبة نية",
+    "kebbeh nayeh": "كبة نية",
+    "kibbeh nayeh": "كبة نية",
+    "raw tenderloin": "فيليه نيء",
+    "raw habra": "هبرة نية",
+    "raw orfali": "أورفالي نيء",
+    "raw liver": "كبدة نية",
+    "raw kafta": "كفتة نية",
+    "raw fitle": "فتلة نية",
+    "fatteh makadem": "فتة مقادم",
+    "fatteh hummus": "فتة حمص",
+    "fatteh lsenet": "فتة لسانات",
+    "meat stuffed vine leaves & zucchini with cutlets": "ورق عنب وكوسا محشية مع كستلاتة",
+    "meat stuffed vine leaves & zucchini": "ورق عنب وكوسا محشية",
+    "meat stuffed vine leaves": "ورق عنب محشي باللحمة",
+    "vine leaves": "ورق عنب",
+    "kebbeh labanieh zghertewiye": "كبة لبنية زغرتاوية",
+    "kebbeh labaniyeh zghertewiye": "كبة لبنية زغرتاوية",
+    "kebbeh labanieh": "كبة لبنية",
+    "shish barak": "شيش برك",
+    "kebbeh & shish barak in laban": "كبة وشيش برك باللبن",
+    "fawaregh stuffed sheep sausages": "فوارغ",
+    "fawaregh": "فوارغ",
+    "fried fawaregh": "فوارغ مقلية",
+    "lsenet": "لسانات",
+    "nikhaat": "نخاعات",
+    "makadem": "مقادم",
+    "nifa": "نيفا",
+    "taouk skewers": "أسياخ طاووق",
+    "grilled kafta": "كفتة مشوية",
+    "kafta": "كفتة",
+    "grilled meat": "لحمة مشوية",
+    "arayes kafta": "عرايس كفتة",
+    "mixed grill": "مشاوي مشكلة",
+    "shish taouk": "شيش طاووق",
+    "kebbeh zghertawiye": "كبة زغرتاوية",
+    "kebbeh zghertewiye stuffed with fat": "كبة بالدهن",
+    "kebbeh zghertewiye stuffed with meat": "كبة باللحمة",
+    "kebbeh zghertewiye stuffed with labneh": "كبة باللبنة",
+    "kebbeh zghertewiye stuffed with butter": "كبة بالزبدة",
+    "kebbeh sajiyeh": "كبة صاجية",
+    "baked meat stuffed kebbeh in a tray": "كبة بالصينية باللحمة",
+    "baked kebbeh with onions in a tray": "كبة بالصينية بالبصل",
+    "baked kebbeh in oil in a tray": "كبة بالزيت بالصينية",
+    "mini kebbeh empty": "كبة فارغة",
+    "mini kebbeh stuffed with meat": "كبة محشية باللحمة",
+    "sambousek": "سمبوسك",
+    "sambousek stuffed with cheese": "سمبوسك بالجبنة",
+    "rkakat cheese": "رقاقات جبنة",
+    "kebbeh pumpkin": "كبة لقطين",
+    "shish barak pack": "شيش برك",
+    "smidiyeh": "سميدية",
+    "mafrouket festo2": "مفروكة فستق",
+    "mafrouket fistok": "مفروكة فستق",
+    "biscuits and raha": "بسكوت وراحة",
+    "carob molasses": "دبس الخروب",
+    "debs kharroub": "دبس الخروب",
+    "halewe": "حلاوة",
 }
 
+# ── Dictionary persistence ────────────────────────────────────────────────────
+def load_dictionary():
+    path = get_data_path('dictionary.json')
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    d = dict(DEFAULT_DICTIONARY)
+    _write_dictionary(d)
+    return d
+
+def _write_dictionary(d):
+    path = get_data_path('dictionary.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+
+# ── Settings persistence ──────────────────────────────────────────────────────
+def load_settings():
+    path = get_data_path('settings.json')
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {'branch': 'الأشرفية'}
+
+def _write_settings(s):
+    path = get_data_path('settings.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(s, f, ensure_ascii=False, indent=2)
+
+# ── In-memory state ───────────────────────────────────────────────────────────
+DICTIONARY = load_dictionary()
+SETTINGS   = load_settings()
+
+# ── Translation ───────────────────────────────────────────────────────────────
 def translate_word(name):
     key = name.lower().strip()
     if key in DICTIONARY:
@@ -142,11 +172,7 @@ def translate_items(items):
         item['arabic_name'] = translate_word(item['name'])
     return items
 
-def get_ui_path():
-    if getattr(sys, 'frozen', False):
-        return os.path.join(sys._MEIPASS, 'ui.html')
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ui.html')
-
+# ── Routes ────────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     with open(get_ui_path(), encoding='utf-8') as f:
@@ -175,10 +201,39 @@ def receipt():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
+@app.route('/dictionary', methods=['GET'])
+def get_dictionary():
+    return jsonify(DICTIONARY)
+
+@app.route('/dictionary/save', methods=['POST'])
+def save_dict():
+    global DICTIONARY
+    try:
+        DICTIONARY = request.json
+        _write_dictionary(DICTIONARY)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/settings', methods=['GET'])
+def get_settings():
+    return jsonify(SETTINGS)
+
+@app.route('/settings/save', methods=['POST'])
+def save_sett():
+    global SETTINGS
+    try:
+        SETTINGS = request.json
+        _write_settings(SETTINGS)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+# ── Receipt builder ───────────────────────────────────────────────────────────
 def build_receipt(d):
     rows = ''
     for item in d['items']:
-        note = f'<div class="note">← {item["comment"]}</div>' if item.get('comment') else ''
+        note = f'<div class="note">{item["comment"]}</div>' if item.get('comment') else ''
         rows += f'''
         <div class="item">
           <div class="row">
@@ -188,8 +243,9 @@ def build_receipt(d):
           {note}
         </div>'''
 
-    sched = '<div class="sched">مجدول ⏰</div>' if d.get('scheduled') else ''
+    sched    = '<div class="sched">مجدول ⏰</div>' if d.get('scheduled') else ''
     time_lbl = 'تجهيز قبل' if d.get('scheduled') else 'وقت التجهيز'
+    branch   = SETTINGS.get('branch', 'الأشرفية')
 
     return f'''<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -208,13 +264,13 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 .info{{padding:3mm 0;border-bottom:1px dashed #000}}
 .ir{{display:flex;justify-content:space-between;margin-bottom:1.5mm;font-size:11px}}
 .il{{color:#000}}
-.iv{{font-weight:900;font-size:16px}}
+.iv{{font-weight:700;font-size:13px}}
 .ih{{background:#000;color:#fff;text-align:center;padding:1.5mm;font-size:12px;font-weight:700;margin:2mm 0 0}}
 .item{{padding:2.5mm 0;border-bottom:1px dotted #000}}
 .row{{display:flex;align-items:center;gap:2mm}}
 .qty{{background:#000;color:#fff;font-weight:900;font-size:16px;padding:0 2mm;border-radius:2px;flex-shrink:0;min-width:8mm;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .iname{{font-weight:700;font-size:16px}}
-.note{{font-size:10px;color:#000;font-style:italic;margin-top:.5mm;margin-right:6mm;border-right:2px solid #000;padding-right:1.5mm}}
+.note{{font-size:14px;font-weight:700;color:#000;margin-top:1mm;margin-right:6mm;border-right:3px solid #000;padding-right:1.5mm}}
 .ft{{text-align:center;margin-top:4mm;padding-top:3mm;border-top:2px dashed #000;font-size:10px;color:#000}}
 .ft b{{font-size:13px;color:#000}}
 </style></head>
@@ -222,7 +278,7 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 <div class="r">
   <div class="hd">
     <div class="logo">كبة زمن</div>
-    <div class="br">فرع الأشرفية</div>
+    <div class="br">فرع {branch}</div>
     <div class="toters">TOTERS</div>
     {sched}
   </div>
@@ -238,6 +294,7 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 <script>window.onload=()=>window.print()</script>
 </body></html>'''
 
+# ── Launch ────────────────────────────────────────────────────────────────────
 def run_flask():
     app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
 
