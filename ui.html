@@ -212,9 +212,9 @@ function renderUI(data) {
   const sched = data.scheduled ? '<div class="meta-row"><span class="badge">SCHEDULED</span></div>' : '';
   meta.innerHTML = `
     ${sched}
-    <div class="meta-row"><span class="meta-label">Customer</span><span class="meta-value" contenteditable id="m-customer">${data.customer}</span></div>
-    <div class="meta-row"><span class="meta-label">Prepare by</span><span class="meta-value" contenteditable id="m-prepare">${data.prepare_by}</span></div>
-    <div class="meta-row"><span class="meta-label">Order #</span><span class="meta-value" contenteditable id="m-order">${data.order_num}</span></div>
+    <div class="meta-row"><span class="meta-label">Customer</span><span class="meta-value" contenteditable id="m-customer">${escHtml(data.customer)}</span></div>
+    <div class="meta-row"><span class="meta-label">Prepare by</span><span class="meta-value" contenteditable id="m-prepare">${escHtml(data.prepare_by)}</span></div>
+    <div class="meta-row"><span class="meta-label">Order #</span><span class="meta-value" contenteditable id="m-order">${escHtml(data.order_num)}</span></div>
   `;
   itemCount = 0;
   document.getElementById('itemsList').innerHTML = '';
@@ -231,10 +231,10 @@ function addItemRow(item = null) {
   div.className = 'item-card';
   div.id = `item-${i}`;
   div.innerHTML = `
-    <div class="qty-badge" contenteditable id="qty${i}">${qty}</div>
+    <div class="qty-badge" contenteditable id="qty${i}">${escHtml(qty)}</div>
     <div class="item-info">
-      <div class="item-ar" contenteditable id="ar${i}">${ar}</div>
-      <div class="item-en" contenteditable id="en${i}">${en}</div>
+      <div class="item-ar" contenteditable id="ar${i}">${escHtml(ar)}</div>
+      <div class="item-en" contenteditable id="en${i}">${escHtml(en)}</div>
     </div>
     <input type="text" class="comment-input" id="c${i}" placeholder="Kitchen note">
     <button class="remove-btn" onclick="removeItem(${i})" title="Remove">✕</button>
@@ -376,7 +376,7 @@ function renderDict() {
 }
 
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function updateDictKey(input, oldKey) {

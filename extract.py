@@ -21,8 +21,8 @@ def parse_order(text):
     }
 
 def _customer(text):
-    m = re.search(r'Customer\s+([A-Za-z]+)', text)
-    return m.group(1).capitalize() if m else 'Unknown'
+    m = re.search(r'Customer\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)', text)
+    return m.group(1).strip().title() if m else 'Unknown'
 
 def _order_num(text):
     m = re.search(r'Order#\s*\n?([0-9\-]+)', text)

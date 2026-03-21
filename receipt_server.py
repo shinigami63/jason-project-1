@@ -1,4 +1,4 @@
-import threading, webview, os, sys
+import threading, webview, os, sys, platform, subprocess
 from flask import Flask, request, jsonify
 import json, urllib.request, urllib.parse
 
@@ -196,7 +196,12 @@ def receipt():
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.html', mode='w', encoding='utf-8')
         tmp.write(html)
         tmp.close()
-        os.startfile(tmp.name)
+        if platform.system() == 'Windows':
+            os.startfile(tmp.name)
+        elif platform.system() == 'Darwin':
+            subprocess.Popen(['open', tmp.name])
+        else:
+            subprocess.Popen(['xdg-open', tmp.name])
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
