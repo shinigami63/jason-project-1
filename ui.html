@@ -269,6 +269,7 @@ async function printReceipt() {
   });
 
   const payload = { ...parsedOrder, customer: get('m-customer'), prepare_by: get('m-prepare'), order_num: get('m-order'), items };
+  autoLearnCorrections();
   const btn    = document.getElementById('printBtn');
   const status = document.getElementById('status');
   btn.disabled = true;
@@ -291,6 +292,29 @@ async function printReceipt() {
     btn.disabled = false;
     btn.innerHTML = '🖨️ Print Receipt';
   }
+}
+
+function autoLearnCorrections() {
+  if (!parsedOrder || !parsedOrder.items) return;
+  const corrections = {};
+  const originalItems = parsedOrder.items;
+  document.querySelectorAll('.item-card').forEach(card => {
+    const id = parseInt(card.id.replace('item-', ''));
+    if (id >= originalItems.length) return;
+    const original = originalItems[id];
+    const currentAr = get(`ar${id}`);
+    const currentEn = get(`en${id}`);
+    if (!currentAr || currentAr === original.arabic_name) return;
+    const key = currentEn.toLowerCase().trim();
+    if (!key) return;
+    corrections[key] = currentAr;
+  });
+  if (Object.keys(corrections).length === 0) return;
+  fetch('/dictionary/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corrections)
+  }).catch(() => {});
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────

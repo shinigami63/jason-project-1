@@ -215,6 +215,17 @@ def save_dict():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
+@app.route('/dictionary/update', methods=['POST'])
+def update_dict():
+    global DICTIONARY
+    try:
+        updates = request.json
+        DICTIONARY.update(updates)
+        _write_dictionary(DICTIONARY)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
 @app.route('/settings', methods=['GET'])
 def get_settings():
     return jsonify(SETTINGS)
