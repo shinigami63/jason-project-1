@@ -422,6 +422,20 @@ function addDictRow() {
   renderDict();
 }
 
+// ── Poll for orders from Chrome extension ─────────────────────────────────
+setInterval(async () => {
+  try {
+    const res = await fetch('/extension/pending');
+    const data = await res.json();
+    if (data && data.items) {
+      parsedOrder = data;
+      renderUI(data);
+      document.getElementById('status').className = 'status';
+      document.getElementById('status').textContent = 'Order received from extension!';
+    }
+  } catch(e) {}
+}, 2500);
+
 async function saveSettings() {
   const statusEl = document.getElementById('spStatus');
   statusEl.textContent = 'Saving...';
