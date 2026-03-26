@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Kebbet <span>Zamen</span></h1>
+    </div>
+
+    <div class="status-row">
+      <div class="indicator" id="serverStatus">
+        <span class="dot"></span>
+        <span class="label">App</span>
+      </div>
+      <div class="indicator" id="pageStatus">
+        <span class="dot"></span>
+        <span class="label">Toters Page</span>
+      </div>
+    </div>
+
+    <button id="sendBtn" class="send-btn" disabled>
+      Send to Kebbet Zamen
+    </button>
+
+    <div class="message" id="message"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

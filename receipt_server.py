@@ -146,6 +146,7 @@ def _write_settings(s):
 # ── In-memory state ───────────────────────────────────────────────────────────
 DICTIONARY = load_dictionary()
 SETTINGS   = load_settings()
+PENDING_ORDER = None
 
 # ── Translation ───────────────────────────────────────────────────────────────
 def translate_word(name):
@@ -244,6 +245,33 @@ def save_sett():
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
+
+# ── Chrome extension endpoints ───────────────────────────────────────────────
+@app.route('/extension/parse', methods=['POST'])
+def extension_parse():
+    global PENDING_ORDER
+    from extract import parse_order
+    raw = request.json.get('text', '')
+    order = parse_order(raw)
+    if not order['items']:
+        return jsonify({'error': 'No items found — check the Toters page'}), 400
+    translate_items(order['items'])
+    PENDING_ORDER = order
+    return jsonify(order)
+
+@app.route('/extension/pending', methods=['GET'])
+def extension_pending():
+    global PENDING_ORDER
+    order = PENDING_ORDER
+    PENDING_ORDER = None
+    return jsonify(order) if order else jsonify(None)
+
+@app.after_request
+def add_cors(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
 
 # ── Receipt builder ───────────────────────────────────────────────────────────
 def build_receipt(d):
