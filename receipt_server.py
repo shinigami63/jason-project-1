@@ -108,6 +108,13 @@ DEFAULT_DICTIONARY = {
     "carob molasses": "دبس الخروب",
     "debs kharroub": "دبس الخروب",
     "halewe": "حلاوة",
+    "monday": "الاثنين",
+    "tuesday": "الثلاثاء",
+    "wednesday": "الأربعاء",
+    "thursday": "الخميس",
+    "friday": "الجمعة",
+    "saturday": "السبت",
+    "sunday": "الأحد",
 }
 
 # ── Dictionary persistence ────────────────────────────────────────────────────
@@ -288,10 +295,10 @@ def build_receipt(d):
           {note}
         </div>'''
 
-    ARABIC_DAYS = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد']
+    EN_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     try:
         dt = datetime.strptime(d['prepare_by'], '%b %d, %I:%M %p').replace(year=datetime.now().year)
-        day_ar = ARABIC_DAYS[dt.weekday()]
+        day_ar = DICTIONARY.get(EN_DAYS[dt.weekday()], EN_DAYS[dt.weekday()])
     except (ValueError, KeyError):
         day_ar = ''
 
