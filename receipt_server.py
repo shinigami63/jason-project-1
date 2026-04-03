@@ -1,4 +1,5 @@
 import threading, webview, os, sys, platform, subprocess
+from datetime import datetime
 from flask import Flask, request, jsonify
 import json, urllib.request, urllib.parse
 
@@ -287,6 +288,13 @@ def build_receipt(d):
           {note}
         </div>'''
 
+    ARABIC_DAYS = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد']
+    try:
+        dt = datetime.strptime(d['prepare_by'], '%b %d, %I:%M %p').replace(year=datetime.now().year)
+        day_ar = ARABIC_DAYS[dt.weekday()]
+    except (ValueError, KeyError):
+        day_ar = ''
+
     sched    = '<div class="sched">مجدول ⏰</div>' if d.get('scheduled') else ''
     time_lbl = 'تجهيز قبل' if d.get('scheduled') else 'وقت التجهيز'
     branch   = SETTINGS.get('branch', 'الأشرفية')
@@ -317,6 +325,7 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 .note{{font-size:14px;font-weight:700;color:#000;margin-top:1mm;margin-right:6mm;border-right:3px solid #000;padding-right:1.5mm}}
 .ft{{text-align:center;margin-top:4mm;padding-top:3mm;border-top:2px dashed #000;font-size:10px;color:#000}}
 .ft b{{font-size:13px;color:#000}}
+.day{{font-size:20px;font-weight:900;text-align:center;margin-top:2mm}}
 </style></head>
 <body>
 <div class="r">
@@ -325,6 +334,7 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
     <div class="br">فرع {branch}</div>
     <div class="toters">TOTERS</div>
     {sched}
+    {'<div class="day">' + day_ar + '</div>' if day_ar else ''}
   </div>
   <div class="info">
     <div class="ir"><span class="il">الزبون</span><span class="iv">{d["customer"]}</span></div>
