@@ -120,14 +120,17 @@ DEFAULT_DICTIONARY = {
 # ── Dictionary persistence ────────────────────────────────────────────────────
 def load_dictionary():
     path = get_data_path('dictionary.json')
+    saved = {}
     if os.path.exists(path):
         try:
             with open(path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                saved = json.load(f)
         except Exception:
             pass
     d = dict(DEFAULT_DICTIONARY)
-    _write_dictionary(d)
+    d.update(saved)
+    if d != saved:
+        _write_dictionary(d)
     return d
 
 def _write_dictionary(d):
