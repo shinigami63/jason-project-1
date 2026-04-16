@@ -337,7 +337,7 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 <body>
 <div class="r">
   <div class="hd">
-    <div class="logo">كبة زمن</div>
+    <div class="logo">كبة زمان</div>
     <div class="br">فرع {branch}</div>
     <div class="toters">TOTERS</div>
     {sched}
