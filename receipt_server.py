@@ -174,7 +174,8 @@ def translate_word(name):
     if key in DICTIONARY:
         return DICTIONARY[key]
     for k, v in DICTIONARY.items():
-        if k in key or key in k:
+        kl = k.lower()
+        if kl in key or key in kl:
             return v
     try:
         params = urllib.parse.urlencode({'q': name, 'langpair': 'en|ar'})
@@ -290,6 +291,8 @@ def set_json_file():
 
     if not isinstance(new_dict, dict):
         return jsonify({'ok': False, 'error': 'JSON file must contain an object (key/value pairs)'}), 400
+
+    new_dict = {k.lower().strip(): v for k, v in new_dict.items()}
 
     # Clear old dictionary.json so previously saved entries are gone
     default_path = get_data_path('dictionary.json')
