@@ -291,6 +291,8 @@ def set_json_file():
     if not isinstance(new_dict, dict):
         return jsonify({'ok': False, 'error': 'JSON file must contain an object (key/value pairs)'}), 400
 
+    new_dict = {k.lower().strip(): v for k, v in new_dict.items()}
+
     # Clear old dictionary.json so previously saved entries are gone
     default_path = get_data_path('dictionary.json')
     if path != default_path:
