@@ -11,6 +11,9 @@ def get_data_path(filename):
         return os.path.join(os.path.dirname(sys.executable), filename)
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
 
+DICTIONARY_PATH = get_data_path('dictionary.json')
+_using_custom_dict = False
+
 def get_ui_path():
     if getattr(sys, 'frozen', False):
         return os.path.join(sys._MEIPASS, 'ui.html')
@@ -119,14 +122,15 @@ DEFAULT_DICTIONARY = {
 
 # ── Dictionary persistence ────────────────────────────────────────────────────
 def load_dictionary():
-    path = get_data_path('dictionary.json')
     saved = {}
-    if os.path.exists(path):
+    if os.path.exists(DICTIONARY_PATH):
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(DICTIONARY_PATH, 'r', encoding='utf-8') as f:
                 saved = json.load(f)
         except Exception:
             pass
+    if _using_custom_dict:
+        return saved
     d = dict(DEFAULT_DICTIONARY)
     d.update(saved)
     if d != saved:
@@ -134,8 +138,7 @@ def load_dictionary():
     return d
 
 def _write_dictionary(d):
-    path = get_data_path('dictionary.json')
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(DICTIONARY_PATH, 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
 
 # ── Settings persistence ──────────────────────────────────────────────────────
@@ -155,8 +158,14 @@ def _write_settings(s):
         json.dump(s, f, ensure_ascii=False, indent=2)
 
 # ── In-memory state ───────────────────────────────────────────────────────────
+SETTINGS = load_settings()
+if 'custom_dict_path' in SETTINGS:
+    _cp = SETTINGS['custom_dict_path']
+    if _cp and os.path.exists(_cp):
+        DICTIONARY_PATH = _cp
+        _using_custom_dict = True
+
 DICTIONARY = load_dictionary()
-SETTINGS   = load_settings()
 PENDING_ORDER = None
 
 # ── Translation ───────────────────────────────────────────────────────────────
@@ -256,6 +265,44 @@ def save_sett():
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/settings/set-json-file', methods=['POST'])
+def set_json_file():
+    global DICTIONARY, DICTIONARY_PATH, SETTINGS, _using_custom_dict
+    path = request.json.get('path', '').strip()
+
+    if not path:
+        DICTIONARY_PATH = get_data_path('dictionary.json')
+        _using_custom_dict = False
+        SETTINGS.pop('custom_dict_path', None)
+        _write_settings(SETTINGS)
+        DICTIONARY = load_dictionary()
+        return jsonify({'ok': True, 'count': len(DICTIONARY), 'path': ''})
+
+    if not os.path.exists(path):
+        return jsonify({'ok': False, 'error': 'File not found: ' + path}), 400
+
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            new_dict = json.load(f)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': 'Invalid JSON: ' + str(e)}), 400
+
+    if not isinstance(new_dict, dict):
+        return jsonify({'ok': False, 'error': 'JSON file must contain an object (key/value pairs)'}), 400
+
+    # Clear old dictionary.json so previously saved entries are gone
+    default_path = get_data_path('dictionary.json')
+    if path != default_path:
+        with open(default_path, 'w', encoding='utf-8') as f:
+            json.dump({}, f)
+
+    DICTIONARY_PATH = path
+    _using_custom_dict = True
+    DICTIONARY = new_dict
+    SETTINGS['custom_dict_path'] = path
+    _write_settings(SETTINGS)
+    return jsonify({'ok': True, 'count': len(DICTIONARY), 'path': path})
 
 # ── Chrome extension endpoints ───────────────────────────────────────────────
 @app.route('/extension/parse', methods=['POST'])

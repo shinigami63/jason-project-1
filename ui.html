@@ -97,6 +97,19 @@
   .btn-save-settings:hover { opacity: .88; }
   .sp-save-status { font-size: 13px; color: var(--muted); }
 
+  /* Custom JSON file section */
+  .sp-note { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .json-file-row { display: flex; gap: 8px; }
+  .json-file-input { flex: 1; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 12px; font-family: monospace; }
+  .json-file-input:focus { outline: none; border-color: var(--red); }
+  .btn-json-load { background: #111; color: #fff; border: none; border-radius: 7px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-json-load:hover { background: #333; }
+  .json-file-active { font-size: 12px; color: var(--muted); margin-top: 8px; font-family: monospace; word-break: break-all; }
+  .json-file-active.custom { color: #2e7d32; font-weight: 600; }
+  .btn-json-reset { background: none; border: 1.5px solid var(--border); color: var(--muted); border-radius: 7px; padding: 6px 14px; font-size: 12px; cursor: pointer; margin-top: 8px; }
+  .btn-json-reset:hover { border-color: var(--red); color: var(--red); }
+  .json-file-status { font-size: 13px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
 </style>
@@ -141,6 +154,18 @@
         <div class="branch-opt" data-branch="الذوق" onclick="selectBranch(this)">الذوق</div>
         <div class="branch-opt" data-branch="dbayeh" onclick="selectBranch(this)">Dbayeh</div>
       </div>
+    </div>
+
+    <div class="sp-section">
+      <h3>Custom JSON File</h3>
+      <p class="sp-note">Point the app to a specific JSON file. It will replace all current dictionary entries and become the file the app reads from and saves to. Previously saved entries will be deleted.</p>
+      <div class="json-file-row">
+        <input id="jsonFilePath" type="text" class="json-file-input" placeholder="Full path to JSON file…">
+        <button class="btn-json-load" onclick="loadJsonFile()">Use This File</button>
+      </div>
+      <div class="json-file-active" id="jsonFileActive"></div>
+      <button class="btn-json-reset" id="jsonResetBtn" onclick="resetJsonFile()" style="display:none">↩ Reset to Default</button>
+      <div class="json-file-status" id="jsonFileStatus"></div>
     </div>
 
     <div class="sp-section">
@@ -329,6 +354,8 @@ async function openSettings() {
   }
   renderBranch();
   renderDict();
+  setJsonFileUI(settingsData.custom_dict_path || '');
+  document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
   document.getElementById('overlay').classList.add('open');
 }
@@ -435,6 +462,74 @@ setInterval(async () => {
     }
   } catch(e) {}
 }, 2500);
+
+// ── Custom JSON file ──────────────────────────────────────────────────────────
+async function loadJsonFile() {
+  const path = document.getElementById('jsonFilePath').value.trim();
+  if (!path) return;
+  const statusEl = document.getElementById('jsonFileStatus');
+  statusEl.textContent = 'Loading…';
+  try {
+    const res = await fetch('/settings/set-json-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      statusEl.textContent = `✅ Loaded ${data.count} entries`;
+      const dr = await fetch('/dictionary');
+      dictData = await dr.json();
+      renderDict();
+      setJsonFileUI(path);
+    } else {
+      statusEl.textContent = '⚠ ' + data.error;
+    }
+  } catch(e) {
+    statusEl.textContent = '⚠ ' + e.message;
+  }
+}
+
+async function resetJsonFile() {
+  const statusEl = document.getElementById('jsonFileStatus');
+  statusEl.textContent = 'Resetting…';
+  try {
+    const res = await fetch('/settings/set-json-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '' })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      statusEl.textContent = '✅ Reset to default';
+      const dr = await fetch('/dictionary');
+      dictData = await dr.json();
+      renderDict();
+      setJsonFileUI('');
+    } else {
+      statusEl.textContent = '⚠ ' + data.error;
+    }
+  } catch(e) {
+    statusEl.textContent = '⚠ ' + e.message;
+  }
+}
+
+function setJsonFileUI(path) {
+  const activeEl = document.getElementById('jsonFileActive');
+  const resetBtn = document.getElementById('jsonResetBtn');
+  const pathInput = document.getElementById('jsonFilePath');
+  if (path) {
+    activeEl.textContent = '● Active: ' + path;
+    activeEl.className = 'json-file-active custom';
+    resetBtn.style.display = 'inline-block';
+    pathInput.value = path;
+  } else {
+    activeEl.textContent = 'Using default dictionary file';
+    activeEl.className = 'json-file-active';
+    resetBtn.style.display = 'none';
+    pathInput.value = '';
+  }
+}
 
 async function saveSettings() {
   const statusEl = document.getElementById('spStatus');
