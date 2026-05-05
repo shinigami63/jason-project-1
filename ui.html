@@ -322,16 +322,19 @@ async function printReceipt() {
 function autoLearnCorrections() {
   if (!parsedOrder || !parsedOrder.items) return;
   const corrections = {};
-  const originalItems = parsedOrder.items;
+  const originalByName = {};
+  parsedOrder.items.forEach(it => {
+    if (it && it.name) originalByName[it.name.toLowerCase().trim()] = it;
+  });
   document.querySelectorAll('.item-card').forEach(card => {
-    const id = parseInt(card.id.replace('item-', ''));
-    if (id >= originalItems.length) return;
-    const original = originalItems[id];
-    const currentAr = get(`ar${id}`);
+    const id = card.id.replace('item-', '');
     const currentEn = get(`en${id}`);
-    if (!currentAr || currentAr === original.arabic_name) return;
+    const currentAr = get(`ar${id}`);
     const key = currentEn.toLowerCase().trim();
-    if (!key) return;
+    if (!key || !currentAr) return;
+    const original = originalByName[key];
+    if (!original) return;
+    if (currentAr === original.arabic_name) return;
     corrections[key] = currentAr;
   });
   if (Object.keys(corrections).length === 0) return;

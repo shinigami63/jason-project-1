@@ -175,7 +175,7 @@ def translate_word(name):
         return DICTIONARY[key]
     for k, v in DICTIONARY.items():
         kl = k.lower()
-        if kl in key or key in kl:
+        if kl in key:
             return v
     try:
         params = urllib.parse.urlencode({'q': name, 'langpair': 'en|ar'})
