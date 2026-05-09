@@ -99,7 +99,7 @@ def _items(lines):
             if pref is None:
                 pref_ar = None
             elif is_portion:
-                pref_ar = None if pref.lower().startswith('platter') else pref
+                pref_ar = None
             else:
                 pref_ar = PREF_AR.get(pref.lower(), pref)
 
@@ -110,9 +110,11 @@ def _items(lines):
                 'Raw' in category
             )
 
-            # Calculate weight qty (skip for portions)
+            # Calculate display qty
             display_qty = qty
-            if not is_portion and variant:
+            if is_portion and pref and not pref.lower().startswith('platter'):
+                display_qty = pref
+            elif not is_portion and variant:
                 wm = WEIGHT_PATTERN.match(variant)
                 if wm:
                     grams = int(wm.group(1)) * int(qty)
