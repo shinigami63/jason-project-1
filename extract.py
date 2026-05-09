@@ -9,6 +9,11 @@ RAW_MEAT_ITEMS = {
     "raw kafta", "raw fitle", "raw meat"
 }
 
+PREF_AR = {
+    'frozen': 'مجمد',
+    'fried': 'مقلي',
+}
+
 def parse_order(text):
     text = re.sub(r'\r\n', '\n', text)
     lines = [l.strip() for l in text.split('\n')]
@@ -79,14 +84,19 @@ def _items(lines):
             if not name:
                 continue
 
+            pref_type = None
             pref = None
             for j in range(i, min(i + 10, len(lines))):
-                m = re.search(r'Choose\s+\w+\s*[>:]\s*(.+)', lines[j])
+                m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
                 if m:
-                    pref = m.group(1).strip()
+                    pref_type = m.group(1).strip().lower()
+                    pref = m.group(2).strip()
                     break
                 if lines[j] == 'Qty':
                     break
+
+            is_portion = pref_type == 'portion'
+            pref_ar = PREF_AR.get(pref.lower(), None) if pref else None
 
             # Detect raw meat
             is_raw = (
@@ -95,9 +105,9 @@ def _items(lines):
                 'Raw' in category
             )
 
-            # Calculate weight for raw meats
+            # Calculate weight qty (skip for portions)
             display_qty = qty
-            if is_raw and variant:
+            if not is_portion and variant:
                 wm = WEIGHT_PATTERN.match(variant)
                 if wm:
                     grams = int(wm.group(1)) * int(qty)
@@ -106,14 +116,14 @@ def _items(lines):
                     if grams >= 1000:
                         kg = grams / 1000
                         display_qty = f'{kg:g}KG'
-                    else:
+                    elif is_raw:
                         display_qty = f'{grams}G'
 
             items.append({
                 'qty': display_qty,
                 'name': name,
-                'variant': None,      # never show variant on receipt
-                'preference': None,   # never show preference on receipt
+                'variant': None,
+                'preference': pref_ar,
                 'category': category,
                 'is_raw': is_raw,
                 'arabic_name': name

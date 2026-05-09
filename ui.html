@@ -249,9 +249,10 @@ function renderUI(data) {
 
 function addItemRow(item = null) {
   const i = itemCount++;
-  const qty = item ? item.qty : '1';
-  const ar  = item ? item.arabic_name : '';
-  const en  = item ? item.name : '';
+  const qty     = item ? item.qty : '1';
+  const ar      = item ? item.arabic_name : '';
+  const en      = item ? item.name : '';
+  const comment = item ? (item.preference || '') : '';
   const div = document.createElement('div');
   div.className = 'item-card';
   div.id = `item-${i}`;
@@ -261,7 +262,7 @@ function addItemRow(item = null) {
       <div class="item-ar" contenteditable id="ar${i}">${escHtml(ar)}</div>
       <div class="item-en" contenteditable id="en${i}">${escHtml(en)}</div>
     </div>
-    <input type="text" class="comment-input" id="c${i}" placeholder="Kitchen note">
+    <input type="text" class="comment-input" id="c${i}" placeholder="Kitchen note" value="${escHtml(comment)}">
     <button class="remove-btn" onclick="removeItem(${i})" title="Remove">✕</button>
   `;
   document.getElementById('itemsList').appendChild(div);
