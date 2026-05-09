@@ -96,7 +96,12 @@ def _items(lines):
                     break
 
             is_portion = pref_type == 'portion'
-            pref_ar = PREF_AR.get(pref.lower(), None) if pref else None
+            if pref is None:
+                pref_ar = None
+            elif is_portion:
+                pref_ar = pref
+            else:
+                pref_ar = PREF_AR.get(pref.lower(), pref)
 
             # Detect raw meat
             is_raw = (
