@@ -99,7 +99,7 @@ def _items(lines):
             if pref is None:
                 pref_ar = None
             elif is_portion:
-                pref_ar = pref
+                pref_ar = None if pref.lower().startswith('platter') else pref
             else:
                 pref_ar = PREF_AR.get(pref.lower(), pref)
 
