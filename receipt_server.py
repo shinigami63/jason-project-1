@@ -175,7 +175,11 @@ def translate_word(name):
 
 def translate_items(items):
     for item in items:
-        item['arabic_name'] = translate_word(item['name'])
+        pref_ar = item.get('preference') or ''
+        if item['name'].lower() == 'shish barak' and pref_ar in ('مجمد', 'مقلي'):
+            item['arabic_name'] = 'شيش برك'
+        else:
+            item['arabic_name'] = translate_word(item['name'])
     return items
 
 # ── Routes ────────────────────────────────────────────────────────────────────
