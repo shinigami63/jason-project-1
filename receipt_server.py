@@ -1,7 +1,7 @@
 import threading, webview, os, sys, platform, subprocess
 from datetime import datetime
 from flask import Flask, request, jsonify
-import json, urllib.request, urllib.parse
+import json
 
 app = Flask(__name__)
 
@@ -171,19 +171,7 @@ PENDING_ORDER = None
 # ── Translation ───────────────────────────────────────────────────────────────
 def translate_word(name):
     key = name.lower().strip()
-    if key in DICTIONARY:
-        return DICTIONARY[key]
-    try:
-        params = urllib.parse.urlencode({'q': name, 'langpair': 'en|ar'})
-        url = f'https://api.mymemory.translated.net/get?{params}'
-        with urllib.request.urlopen(url, timeout=5) as r:
-            data = json.loads(r.read())
-            result = data['responseData']['translatedText']
-            if result and result != name:
-                return result
-    except Exception:
-        pass
-    return name
+    return DICTIONARY.get(key, name)
 
 def translate_items(items):
     for item in items:
