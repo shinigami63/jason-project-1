@@ -173,10 +173,6 @@ def translate_word(name):
     key = name.lower().strip()
     if key in DICTIONARY:
         return DICTIONARY[key]
-    for k, v in DICTIONARY.items():
-        kl = k.lower()
-        if kl in key:
-            return v
     try:
         params = urllib.parse.urlencode({'q': name, 'langpair': 'en|ar'})
         url = f'https://api.mymemory.translated.net/get?{params}'
