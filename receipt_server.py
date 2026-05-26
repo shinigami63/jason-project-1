@@ -12,6 +12,7 @@ def get_data_path(filename):
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
 
 DICTIONARY_PATH = get_data_path('dictionary.json')
+PREFERENCES_PATH = get_data_path('preferences.json')
 _using_custom_dict = False
 
 def get_ui_path():
@@ -141,6 +142,20 @@ def _write_dictionary(d):
     with open(DICTIONARY_PATH, 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
 
+# ── Preferences persistence ──────────────────────────────────────────────────
+def load_preferences():
+    if os.path.exists(PREFERENCES_PATH):
+        try:
+            with open(PREFERENCES_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def _write_preferences(d):
+    with open(PREFERENCES_PATH, 'w', encoding='utf-8') as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+
 # ── Settings persistence ──────────────────────────────────────────────────────
 def load_settings():
     path = get_data_path('settings.json')
@@ -166,6 +181,7 @@ if 'custom_dict_path' in SETTINGS:
         _using_custom_dict = True
 
 DICTIONARY = load_dictionary()
+PREFERENCES = load_preferences()
 PENDING_ORDER = None
 
 # ── Translation ───────────────────────────────────────────────────────────────
@@ -173,8 +189,14 @@ def translate_word(name):
     key = name.lower().strip()
     return DICTIONARY.get(key, name)
 
+def translate_preference(text):
+    if not text:
+        return text
+    return PREFERENCES.get(text.lower().strip(), text)
+
 def translate_items(items):
     for item in items:
+        item['preference'] = translate_preference(item.get('preference'))
         pref_ar = item.get('preference') or ''
         if item['name'].lower() == 'shish barak' and pref_ar in ('مجمد', 'مقلي'):
             item['arabic_name'] = 'شيش برك'
@@ -237,6 +259,21 @@ def update_dict():
         updates = request.json
         DICTIONARY.update(updates)
         _write_dictionary(DICTIONARY)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/preferences', methods=['GET'])
+def get_preferences():
+    return jsonify(PREFERENCES)
+
+@app.route('/preferences/update', methods=['POST'])
+def update_preferences():
+    global PREFERENCES
+    try:
+        updates = {k.lower().strip(): v for k, v in request.json.items() if k and v}
+        PREFERENCES.update(updates)
+        _write_preferences(PREFERENCES)
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})

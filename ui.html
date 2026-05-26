@@ -323,6 +323,7 @@ async function printReceipt() {
 function autoLearnCorrections() {
   if (!parsedOrder || !parsedOrder.items) return;
   const corrections = {};
+  const prefCorrections = {};
   const originalByName = {};
   parsedOrder.items.forEach(it => {
     if (it && it.name) originalByName[it.name.toLowerCase().trim()] = it;
@@ -335,15 +336,29 @@ function autoLearnCorrections() {
     if (!key || !currentAr) return;
     const original = originalByName[key];
     if (!original) return;
-    if (currentAr === original.arabic_name) return;
-    corrections[key] = currentAr;
+    if (currentAr !== original.arabic_name) {
+      corrections[key] = currentAr;
+    }
+    const currentNote = document.getElementById(`c${id}`)?.value.trim() || '';
+    const originalRaw = (original.original_preference || '').trim();
+    if (originalRaw && currentNote && currentNote !== (original.preference || '').trim()) {
+      prefCorrections[originalRaw.toLowerCase()] = currentNote;
+    }
   });
-  if (Object.keys(corrections).length === 0) return;
-  fetch('/dictionary/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(corrections)
-  }).catch(() => {});
+  if (Object.keys(corrections).length > 0) {
+    fetch('/dictionary/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corrections)
+    }).catch(() => {});
+  }
+  if (Object.keys(prefCorrections).length > 0) {
+    fetch('/preferences/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefCorrections)
+    }).catch(() => {});
+  }
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
