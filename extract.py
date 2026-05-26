@@ -3,11 +3,60 @@ import re
 SIZE_PATTERN = re.compile(r'^\d+\s*(G|g|ML|ml|kg|KG|pieces?|Piece|piece|gr|persons?)$', re.IGNORECASE)
 WEIGHT_PATTERN = re.compile(r'^(\d+)\s*(G|g|gr|KG|kg)$', re.IGNORECASE)
 
+QUANTITY_TYPES = {'quantity', 'qty', 'amount', 'count', 'number'}
+
 RAW_MEAT_ITEMS = {
     "raw kibbeh", "raw kebbeh", "kebbeh nayeh", "kibbeh nayeh",
     "raw tenderloin", "raw habra", "raw orfali", "raw liver",
     "raw kafta", "raw fitle", "raw meat"
 }
+
+COMBOS = {
+    "kebbeh zghertawiyeh combo": {
+        "kebbeh": 1.0, "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
+    },
+    "taouk combo": {
+        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
+        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+    },
+    "meat combo": {
+        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
+        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+    },
+    "kafta combo": {
+        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
+        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+    },
+    "mixed grill combo": {
+        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
+        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+    },
+    "kebbe lovers box": {
+        "kebbeh": 3.0, "salad": 1.0, "fries": 1.0,
+        "french fries": 1.0, "mezza": 1.0,
+    },
+    "family sharing combo": {
+        "mixed grill": 1.0, "salad": 2.0, "mezza": 2.0,
+        "fries": 2.0, "french fries": 2.0, "kebbeh": 2.0,
+    },
+    "vegan combo": {
+        "kebbeh": 1.0, "fries": 0.5, "french fries": 0.5,
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
+    },
+    "kebbe tray combo": {
+        "kebbeh": 1.0, "cucumber": 0.5, "mezza": 0.5,
+        "drink": 1.0, "water": 1.0,
+    },
+}
+
+
+def _format_qty(total):
+    whole = int(total)
+    frac  = total - whole
+    if abs(frac - 0.5) < 0.01:
+        return '½' if whole == 0 else f'{whole}½'
+    return str(whole) if abs(frac) < 0.01 else str(total)
+
 
 def parse_order(text):
     text = re.sub(r'\r\n', '\n', text)
@@ -31,6 +80,47 @@ def _order_num(text):
 def _prepare_by(text):
     m = re.search(r'Prepare by\s*\n?([\w]+\s+\d+,\s*\d+:\d+\s*(?:AM|PM))', text)
     return m.group(1).strip() if m else ''
+
+def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
+    try:
+        combo_qty = float(combo_qty_str)
+    except (TypeError, ValueError):
+        combo_qty = 1.0
+
+    combo_def = COMBOS.get(combo_name.lower().strip(), {})
+    result    = []
+
+    for j in range(start_i, len(lines)):
+        if lines[j] == 'Qty':
+            break
+        m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
+        if not m:
+            continue
+        this_type = m.group(1).strip().lower()
+        item_name = m.group(2).strip()
+
+        # Portion from definition; fallback to Toters' N xpost_add value
+        portion = combo_def.get(this_type, None)
+        if portion is None:
+            portion = 1.0
+            if j > 0:
+                qm = re.match(r'^(\d+(?:\.\d+)?)\s*x', lines[j - 1], re.IGNORECASE)
+                if qm:
+                    portion = float(qm.group(1))
+
+        display_qty = _format_qty(combo_qty * portion)
+
+        result.append({
+            'qty':              display_qty,
+            'name':             item_name,
+            'variant':          None,
+            'add_ons':          [],
+            'original_add_ons': [],
+            'category':         'Combos',
+            'is_raw':           False,
+            'arabic_name':      item_name,
+        })
+    return result
 
 def _items(lines):
     items = []
@@ -79,9 +169,14 @@ def _items(lines):
             if not name:
                 continue
 
+            # Combo: expand into individual components
+            if 'combo' in category.lower():
+                items.extend(_parse_combo_components(lines, i, name, qty))
+                continue
+
             pref_type = None
             pref = None
-            extra_prefs = []
+            add_ons_list = []
             for j in range(i, len(lines)):
                 if lines[j] == 'Qty':
                     break
@@ -89,15 +184,16 @@ def _items(lines):
                 if not m:
                     continue
                 this_type = m.group(1).strip().lower()
-                this_val = m.group(2).strip()
+                this_val  = m.group(2).strip()
                 if this_type == 'portion' and pref is None:
                     pref_type = this_type
                     pref = this_val
+                elif this_type in QUANTITY_TYPES and this_val.strip().isdigit():
+                    qty = this_val
                 else:
-                    extra_prefs.append(this_val)
+                    add_ons_list.append(this_val)
 
             is_portion = pref_type == 'portion'
-            preference_raw = ', '.join(extra_prefs) if extra_prefs else None
 
             # Detect raw meat
             is_raw = (
@@ -123,14 +219,14 @@ def _items(lines):
                         display_qty = f'{grams}G'
 
             items.append({
-                'qty': display_qty,
-                'name': name,
-                'variant': None,
-                'preference': preference_raw,
-                'original_preference': preference_raw,
-                'category': category,
-                'is_raw': is_raw,
-                'arabic_name': name
+                'qty':              display_qty,
+                'name':             name,
+                'variant':          None,
+                'add_ons':          add_ons_list,
+                'original_add_ons': list(add_ons_list),
+                'category':         category,
+                'is_raw':           is_raw,
+                'arabic_name':      name
             })
         else:
             i += 1

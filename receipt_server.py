@@ -199,19 +199,13 @@ def translate_word(name):
     key = name.lower().strip()
     return DICTIONARY.get(key, name)
 
-def translate_preference(text):
-    if not text:
-        return text
-    return PREFERENCES.get(text.lower().strip(), text)
+def translate_add_ons(add_ons_list):
+    return [PREFERENCES.get(ao.lower().strip(), ao) for ao in (add_ons_list or [])]
 
 def translate_items(items):
     for item in items:
-        item['preference'] = translate_preference(item.get('preference'))
-        pref_ar = item.get('preference') or ''
-        if item['name'].lower() == 'shish barak' and pref_ar in ('مجمد', 'مقلي'):
-            item['arabic_name'] = 'شيش برك'
-        else:
-            item['arabic_name'] = translate_word(item['name'])
+        item['add_ons']     = translate_add_ons(item.get('add_ons', []))
+        item['arabic_name'] = translate_word(item['name'])
     return items
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -373,14 +367,17 @@ def add_cors(response):
 def build_receipt(d):
     rows = ''
     for item in d['items']:
-        note = f'<div class="note">{item["comment"]}</div>' if item.get('comment') else ''
+        notes_html = ''.join(
+            f'<div class="note">{c}</div>'
+            for c in item.get('comments', []) if c
+        )
         rows += f'''
         <div class="item">
           <div class="row">
             <span class="qty">{item["qty"]}</span>
             <span class="iname">{item["arabic_name"]}</span>
           </div>
-          {note}
+          {notes_html}
         </div>'''
 
     EN_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
