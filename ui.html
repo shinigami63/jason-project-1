@@ -45,15 +45,22 @@
   .meta-value { font-weight: 700; font-size: 13px; }
 
   .items-section { display: none; }
-  .item-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
+  .item-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 0; }
+  .item-main { display: flex; align-items: center; gap: 10px; width: 100%; }
   .qty-badge { background: #111; color: #fff; font-size: 15px; font-weight: 900; min-width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0 6px; cursor: text; }
   .item-info { flex: 1; min-width: 0; }
   .item-ar { font-size: 15px; font-weight: 700; direction: rtl; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
   .item-en { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .comment-input { width: 150px; padding: 7px 9px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 12px; flex-shrink: 0; }
-  .comment-input:focus { outline: none; border-color: var(--red); }
   .remove-btn { background: none; border: none; color: #ccc; font-size: 20px; cursor: pointer; flex-shrink: 0; line-height: 1; padding: 0 4px; }
   .remove-btn:hover { color: var(--red); }
+  .item-notes { padding-left: 48px; display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+  .note-row { display: flex; gap: 6px; align-items: center; }
+  .note-input { flex: 1; padding: 6px 9px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 12px; }
+  .note-input:focus { outline: none; border-color: var(--red); }
+  .note-del { background: none; border: none; color: #ccc; font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1; }
+  .note-del:hover { color: var(--red); }
+  .btn-add-note { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 2px 0; text-align: left; }
+  .btn-add-note:hover { color: var(--red); }
 
   /* ── Settings overlay ──────────────────────────────────────────────────── */
   .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; }
@@ -248,24 +255,50 @@ function renderUI(data) {
 }
 
 function addItemRow(item = null) {
-  const i = itemCount++;
-  const qty     = item ? item.qty : '1';
-  const ar      = item ? item.arabic_name : '';
-  const en      = item ? item.name : '';
-  const comment = item ? (item.preference || '') : '';
+  const i        = itemCount++;
+  const qty      = item?.qty ?? '1';
+  const ar       = item?.arabic_name ?? '';
+  const en       = item?.name ?? '';
+  const addOns   = item?.add_ons ?? [];
+  const origAOs  = item?.original_add_ons ?? [];
+
+  const notesHtml = addOns.map((ao, j) => `
+    <div class="note-row">
+      <input type="text" class="note-input" placeholder="Kitchen note"
+             data-original="${escHtml(origAOs[j] ?? '')}"
+             value="${escHtml(ao)}">
+      <button class="note-del" onclick="this.closest('.note-row').remove()">✕</button>
+    </div>`).join('');
+
   const div = document.createElement('div');
   div.className = 'item-card';
   div.id = `item-${i}`;
   div.innerHTML = `
-    <div class="qty-badge" contenteditable id="qty${i}">${escHtml(qty)}</div>
-    <div class="item-info">
-      <div class="item-ar" contenteditable id="ar${i}">${escHtml(ar)}</div>
-      <div class="item-en" contenteditable id="en${i}">${escHtml(en)}</div>
+    <div class="item-main">
+      <div class="qty-badge" contenteditable id="qty${i}">${escHtml(qty)}</div>
+      <div class="item-info">
+        <div class="item-ar" contenteditable id="ar${i}">${escHtml(ar)}</div>
+        <div class="item-en" contenteditable id="en${i}">${escHtml(en)}</div>
+      </div>
+      <button class="remove-btn" onclick="removeItem(${i})" title="Remove">✕</button>
     </div>
-    <input type="text" class="comment-input" id="c${i}" placeholder="Kitchen note" value="${escHtml(comment)}">
-    <button class="remove-btn" onclick="removeItem(${i})" title="Remove">✕</button>
-  `;
+    <div class="item-notes" id="notes${i}">
+      ${notesHtml}
+      <button class="btn-add-note" onclick="addNoteRow(${i})">+ note</button>
+    </div>`;
   document.getElementById('itemsList').appendChild(div);
+}
+
+function addNoteRow(i) {
+  const notesEl = document.getElementById(`notes${i}`);
+  const btn = notesEl.querySelector('.btn-add-note');
+  const row = document.createElement('div');
+  row.className = 'note-row';
+  row.innerHTML = `
+    <input type="text" class="note-input" placeholder="Kitchen note">
+    <button class="note-del" onclick="this.closest('.note-row').remove()">✕</button>`;
+  notesEl.insertBefore(row, btn);
+  row.querySelector('input').focus();
 }
 
 function addItem() {
@@ -291,7 +324,9 @@ async function printReceipt() {
     const qty = get(`qty${id}`);
     const ar  = get(`ar${id}`);
     if (!qty || !ar) return;
-    items.push({ qty, arabic_name: ar, name: get(`en${id}`), comment: document.getElementById(`c${id}`)?.value.trim() || '' });
+    const comments = [...card.querySelectorAll('.note-input')]
+      .map(inp => inp.value.trim()).filter(Boolean);
+    items.push({ qty, arabic_name: ar, name: get(`en${id}`), comments });
   });
 
   const payload = { ...parsedOrder, customer: get('m-customer'), prepare_by: get('m-prepare'), order_num: get('m-order'), items };
@@ -339,11 +374,13 @@ function autoLearnCorrections() {
     if (currentAr !== original.arabic_name) {
       corrections[key] = currentAr;
     }
-    const currentNote = document.getElementById(`c${id}`)?.value.trim() || '';
-    const originalRaw = (original.original_preference || '').trim();
-    if (originalRaw && currentNote && currentNote !== (original.preference || '').trim()) {
-      prefCorrections[originalRaw.toLowerCase()] = currentNote;
-    }
+    card.querySelectorAll('.note-input[data-original]').forEach(inp => {
+      const originalRaw = inp.dataset.original;
+      const currentVal  = inp.value.trim();
+      if (originalRaw && currentVal && currentVal !== inp.defaultValue.trim()) {
+        prefCorrections[originalRaw.toLowerCase()] = currentVal;
+      }
+    });
   });
   if (Object.keys(corrections).length > 0) {
     fetch('/dictionary/update', {
