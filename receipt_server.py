@@ -143,14 +143,24 @@ def _write_dictionary(d):
         json.dump(d, f, ensure_ascii=False, indent=2)
 
 # ── Preferences persistence ──────────────────────────────────────────────────
+DEFAULT_PREFERENCES = {
+    "frozen": "مجمد",
+    "fried": "مقلي",
+}
+
 def load_preferences():
+    saved = {}
     if os.path.exists(PREFERENCES_PATH):
         try:
             with open(PREFERENCES_PATH, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                saved = json.load(f)
         except Exception:
             pass
-    return {}
+    d = dict(DEFAULT_PREFERENCES)
+    d.update(saved)
+    if d != saved:
+        _write_preferences(d)
+    return d
 
 def _write_preferences(d):
     with open(PREFERENCES_PATH, 'w', encoding='utf-8') as f:
