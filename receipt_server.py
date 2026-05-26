@@ -1,4 +1,9 @@
-import threading, webview, os, sys, platform, subprocess
+import threading, os, sys, platform, subprocess
+try:
+    import webview
+    _HAS_WEBVIEW = True
+except ImportError:
+    _HAS_WEBVIEW = False
 from datetime import datetime
 from flask import Flask, request, jsonify
 import json
@@ -441,19 +446,27 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 </body></html>'''
 
 # ── Launch ────────────────────────────────────────────────────────────────────
-def run_flask():
-    app.run(host='127.0.0.1', port=5001, debug=False, use_reloader=False)
+def run_flask(host='127.0.0.1'):
+    app.run(host=host, port=5001, debug=False, use_reloader=False)
 
 if __name__ == '__main__':
-    t = threading.Thread(target=run_flask, daemon=True)
-    t.start()
-    import time
-    time.sleep(1)
-    webview.create_window(
-        'Kebbet Zamen — Receipt',
-        'http://127.0.0.1:5001',
-        width=800,
-        height=700,
-        resizable=True
-    )
-    webview.start()
+    if _HAS_WEBVIEW:
+        t = threading.Thread(target=run_flask, daemon=True)
+        t.start()
+        import time
+        time.sleep(1)
+        webview.create_window(
+            'Kebbet Zamen — Receipt',
+            'http://127.0.0.1:5001',
+            width=800,
+            height=700,
+            resizable=True
+        )
+        webview.start()
+    else:
+        import socket
+        ip = socket.gethostbyname(socket.gethostname())
+        print(f'\n  Kebbet Zamen running at:')
+        print(f'  → http://localhost:5001  (this machine)')
+        print(f'  → http://{ip}:5001       (from phone on same WiFi)\n')
+        run_flask(host='0.0.0.0')
