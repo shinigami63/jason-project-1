@@ -9,11 +9,6 @@ RAW_MEAT_ITEMS = {
     "raw kafta", "raw fitle", "raw meat"
 }
 
-PREF_AR = {
-    'frozen': 'مجمد',
-    'fried': 'مقلي',
-}
-
 def parse_order(text):
     text = re.sub(r'\r\n', '\n', text)
     lines = [l.strip() for l in text.split('\n')]
@@ -86,22 +81,23 @@ def _items(lines):
 
             pref_type = None
             pref = None
-            for j in range(i, min(i + 10, len(lines))):
-                m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
-                if m:
-                    pref_type = m.group(1).strip().lower()
-                    pref = m.group(2).strip()
-                    break
+            extra_prefs = []
+            for j in range(i, len(lines)):
                 if lines[j] == 'Qty':
                     break
+                m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
+                if not m:
+                    continue
+                this_type = m.group(1).strip().lower()
+                this_val = m.group(2).strip()
+                if this_type == 'portion' and pref is None:
+                    pref_type = this_type
+                    pref = this_val
+                else:
+                    extra_prefs.append(this_val)
 
             is_portion = pref_type == 'portion'
-            if pref is None:
-                pref_ar = None
-            elif is_portion:
-                pref_ar = None
-            else:
-                pref_ar = PREF_AR.get(pref.lower(), pref)
+            preference_raw = ', '.join(extra_prefs) if extra_prefs else None
 
             # Detect raw meat
             is_raw = (
@@ -130,7 +126,8 @@ def _items(lines):
                 'qty': display_qty,
                 'name': name,
                 'variant': None,
-                'preference': pref_ar,
+                'preference': preference_raw,
+                'original_preference': preference_raw,
                 'category': category,
                 'is_raw': is_raw,
                 'arabic_name': name
