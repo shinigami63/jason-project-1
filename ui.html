@@ -213,13 +213,18 @@
         <thead>
           <tr>
             <th>Item (English)</th>
-            <th>Saved Notes</th>
+            <th>Notes (separate multiple with |)</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="notesBody"></tbody>
       </table>
-      <div class="dict-add-row" style="margin-top:8px;">
+      <div class="dict-add-row">
+        <input id="newNoteEn" placeholder="item name">
+        <input id="newNoteVal" placeholder="note 1 | note 2">
+        <button class="btn-dict-add" onclick="addNoteRow()">+ Add</button>
+      </div>
+      <div class="dict-add-row" style="margin-top:4px;">
         <button class="btn-dict-add" onclick="exportNotes()">⬇ Export</button>
         <button class="btn-dict-add" onclick="importNotesPrompt()">⬆ Import</button>
       </div>
@@ -581,16 +586,42 @@ function renderNotes() {
   const tbody = document.getElementById('notesBody');
   if (!tbody) return;
   const rows = Object.entries(notesMemoryData)
-    .filter(([k, v]) => !notesFilter || k.includes(notesFilter) || v.join(' ').toLowerCase().includes(notesFilter))
+    .filter(([k, v]) => !notesFilter || k.toLowerCase().includes(notesFilter) || v.join(' ').toLowerCase().includes(notesFilter))
     .sort(([a], [b]) => a.localeCompare(b));
-  tbody.innerHTML = rows.length === 0
-    ? '<tr><td colspan="3" style="color:var(--muted);font-size:13px;padding:8px 4px;">No saved notes yet.</td></tr>'
-    : rows.map(([en, notes]) => `
-      <tr>
-        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(en)}</td>
-        <td style="color:#333;direction:rtl;text-align:right;">${escHtml(notes.join(' | '))}</td>
-        <td><button class="dict-del" onclick="deleteNoteRow(${JSON.stringify(en)})">✕</button></td>
-      </tr>`).join('');
+  tbody.innerHTML = '';
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);font-size:13px;padding:8px 4px;">No saved notes yet.</td></tr>';
+    return;
+  }
+  rows.forEach(([en, notes]) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input class="dict-input" value="${escHtml(en)}" data-key="${escHtml(en)}" onchange="updateNoteKey(this,'${escHtml(en)}')" onblur="updateNoteKey(this,'${escHtml(en)}')"></td>
+      <td><input class="dict-input" value="${escHtml(notes.join(' | '))}" data-key="${escHtml(en)}" onchange="updateNoteVal(this)" onblur="updateNoteVal(this)"></td>
+      <td><button class="dict-del" onclick="deleteNoteRow(${JSON.stringify(en)})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateNoteKey(input, oldKey) {
+  const newKey = input.value.trim().toLowerCase();
+  if (!newKey || newKey === oldKey) return;
+  const val = notesMemoryData[oldKey];
+  delete notesMemoryData[oldKey];
+  notesMemoryData[newKey] = val;
+  input.dataset.key = newKey;
+  const row = input.closest('tr');
+  if (row) {
+    const valInput = row.querySelectorAll('.dict-input')[1];
+    if (valInput) valInput.dataset.key = newKey;
+  }
+}
+
+function updateNoteVal(input) {
+  const key = input.dataset.key;
+  if (!key) return;
+  notesMemoryData[key] = input.value.split('|').map(s => s.trim()).filter(Boolean);
 }
 
 function filterNotes() {
@@ -600,6 +631,20 @@ function filterNotes() {
 
 function deleteNoteRow(en) {
   delete notesMemoryData[en];
+  renderNotes();
+}
+
+function addNoteRow() {
+  const enEl = document.getElementById('newNoteEn');
+  const valEl = document.getElementById('newNoteVal');
+  const en = enEl.value.trim().toLowerCase();
+  const notes = valEl.value.split('|').map(s => s.trim()).filter(Boolean);
+  if (!en || notes.length === 0) return;
+  notesMemoryData[en] = notes;
+  enEl.value = '';
+  valEl.value = '';
+  document.getElementById('notesSearch').value = '';
+  notesFilter = '';
   renderNotes();
 }
 
