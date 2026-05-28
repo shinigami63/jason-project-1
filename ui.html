@@ -237,6 +237,15 @@
       </div>
     </div>
 
+    <div class="sp-section" style="padding-top:4px;">
+      <h3>App Update</h3>
+      <p class="sp-note">Downloads the latest ui.html and receipt_server.py from GitHub. The UI updates immediately on next page load. The server update takes effect after you restart the app.</p>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn-dict-add" onclick="selfUpdate()" id="updateBtn">⬇ Update App</button>
+        <span id="updateStatus" style="font-size:13px;color:var(--muted);"></span>
+      </div>
+    </div>
+
     <div class="sp-footer">
       <button class="btn-save-settings" onclick="saveSettings()">Save Changes</button>
       <span class="sp-save-status" id="spStatus"></span>
@@ -789,6 +798,27 @@ async function saveSettings() {
     statusEl.textContent = '⚠ ' + e.message;
   }
 }
+async function selfUpdate() {
+  const btn = document.getElementById('updateBtn');
+  const statusEl = document.getElementById('updateStatus');
+  btn.disabled = true;
+  statusEl.textContent = 'Updating…';
+  try {
+    const res = await fetch('/self-update', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      statusEl.textContent = '✅ Updated! Reloading…';
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      statusEl.textContent = '⚠ ' + (data.error || 'Failed');
+      btn.disabled = false;
+    }
+  } catch(e) {
+    statusEl.textContent = '⚠ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
 // Load notes memory at startup so auto-fill works before first order
 fetch('/notes-memory').then(r => r.json()).then(d => { notesMemory = d || {}; }).catch(() => {});
 </script>
