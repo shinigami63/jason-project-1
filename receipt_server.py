@@ -30,9 +30,12 @@ DEFAULT_DICTIONARY = {
     "1 head nifa": "نيفا",
     "1 person hummus fatteh": "فتة حمص",
     "1 person lsenet fatteh": "فتة لسانات",
+    "7up": "سفن أب",
     "aadas bi hamoud": "عدس بالحامض",
     "arayes kafta": "عرايس كفتة",
     "bacha w assekrou": "باشا وعسكره",
+    "baked kebbeh tray with meat stuffed": "كبة بالصينية باللحمة",
+    "baked kebbeh tray with onions": "كبة بيصل بالصينية",
     "baked kebbeh with onions in a tray": "كبة بيصل بالصينية",
     "baked meat stuffed kebbeh in a tray": "كبة بالصينية باللحمة",
     "bamieh bil lahme & rice": "بامية باللحمة وأرز",
@@ -40,6 +43,7 @@ DEFAULT_DICTIONARY = {
     "beirut beer": "بيرة بيروت",
     "beirut beer light": "بيرة بيروت لايت",
     "biscuits & raha": "بسكوت وراحة",
+    "biscuits and raha": "بسكوت وراحة",
     "borghol aa banadoura": "برغل بالبندورة",
     "cabbage salad": "سلطة ملفوف",
     "carob molasses": "دبس الخروب",
@@ -47,6 +51,8 @@ DEFAULT_DICTIONARY = {
     "chicken liver in pomegranate molasses": "سودة دجاج بدبس الرمان",
     "cucumber with laban": "خيار بلبن",
     "daoud bacha & rice": "داوود باشا وأرز",
+    "diet 7up": "سفن أب دايت",
+    "diet pepsi": "بيبسي دايت",
     "djej w batata bil forn": "دجاج وبطاطا بالفرن",
     "fassoulia bi lahme & rice": "فاصوليا باللحمة وأرز",
     "fattouch": "فتوش",
@@ -74,6 +80,9 @@ DEFAULT_DICTIONARY = {
     "kebbeh labanieh zghertewiye": "كبة لبنية زغرتاوية",
     "kebbeh sajiyeh": "كبة صاجية",
     "kebbeh with oil": "كبة بالزيت",
+    "kebbeh zghertawiye (fat)": "قرص بالدهن",
+    "kebbeh zghertawiye (labneh)": "قرص باللبنة",
+    "kebbeh zghertawiye (meat)": "قرص باللحمة",
     "kebbeh zghertawiye stuffed with butter": "قرص بالزبدة",
     "kebbeh zghertawiye stuffed with fat": "قرص بالدهن",
     "kebbeh zghertawiye stuffed with labneh": "قرص باللبنة",
@@ -99,6 +108,7 @@ DEFAULT_DICTIONARY = {
     "mezza beer": "بيرة مازة",
     "mini empty kebbeh": "كبة فارغة",
     "mini kebbeh stuffed with meat": "كبة محشية",
+    "mirinda": "ميريندا",
     "mixed grills": "مشاوي مشكل",
     "mloukhieh djej & rice": "ملوخية دجاج وأرز",
     "moughrabieh": "مغربية",
@@ -111,6 +121,7 @@ DEFAULT_DICTIONARY = {
     "nkhahaat": "نخاعات",
     "oriental rice": "أرز معمر",
     "oriental salad": "سلطة عربية",
+    "pepsi": "بيبسي",
     "pickles": "كبيس",
     "potatoes with garlic & coriander": "بطاطا بالثوم والكزبرة",
     "pumpkin kebbeh": "كبة لقطين",
@@ -143,6 +154,7 @@ DEFAULT_DICTIONARY = {
     "tomatoes & onions salad": "سلطة بندورة وبصل",
     "vegetables": "جاط خضرة",
     "vine leaves in oil": "ورق عنب بالزيت",
+    "water": "مياه",
     "yogurt": "لبن",
     "monday": "الاثنين",
     "tuesday": "الثلاثاء",
@@ -238,6 +250,9 @@ def translate_items(items):
     for item in items:
         item['add_ons']     = translate_add_ons(item.get('add_ons', []))
         item['arabic_name'] = translate_word(item['name'])
+        name_key = item['name'].lower().strip()
+        if item.get('category') == 'Combos' and 'biscuit' in name_key and 'raha' in name_key:
+            item['arabic_name'] = 'بسكوت وراحة قطعتين مطبقين'
     return items
 
 # ── Routes ────────────────────────────────────────────────────────────────────
