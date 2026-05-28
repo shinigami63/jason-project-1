@@ -222,7 +222,7 @@
       <div class="dict-add-row">
         <input id="newNoteEn" placeholder="item name">
         <input id="newNoteVal" placeholder="note 1 | note 2">
-        <button class="btn-dict-add" onclick="addNoteRow()">+ Add</button>
+        <button class="btn-dict-add" onclick="addNotesMemoryRow()">+ Add</button>
       </div>
       <div class="dict-add-row" style="margin-top:4px;">
         <button class="btn-dict-add" onclick="exportNotes()">⬇ Export</button>
@@ -634,7 +634,7 @@ function deleteNoteRow(en) {
   renderNotes();
 }
 
-function addNoteRow() {
+function addNotesMemoryRow() {
   const enEl = document.getElementById('newNoteEn');
   const valEl = document.getElementById('newNoteVal');
   const en = enEl.value.trim().toLowerCase();
