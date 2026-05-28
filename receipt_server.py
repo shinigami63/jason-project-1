@@ -18,6 +18,7 @@ def get_data_path(filename):
 
 DICTIONARY_PATH = get_data_path('dictionary.json')
 PREFERENCES_PATH = get_data_path('preferences.json')
+NOTES_MEMORY_PATH = get_data_path('notes_memory.json')
 _using_custom_dict = False
 
 def get_ui_path():
@@ -211,6 +212,20 @@ def _write_preferences(d):
     with open(PREFERENCES_PATH, 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
 
+# ── Notes memory persistence ──────────────────────────────────────────────────
+def load_notes_memory():
+    if os.path.exists(NOTES_MEMORY_PATH):
+        try:
+            with open(NOTES_MEMORY_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def _write_notes_memory(d):
+    with open(NOTES_MEMORY_PATH, 'w', encoding='utf-8') as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+
 # ── Settings persistence ──────────────────────────────────────────────────────
 def load_settings():
     path = get_data_path('settings.json')
@@ -237,6 +252,7 @@ if 'custom_dict_path' in SETTINGS:
 
 DICTIONARY = load_dictionary()
 PREFERENCES = load_preferences()
+NOTES_MEMORY = load_notes_memory()
 PENDING_ORDER = None
 
 # ── Translation ───────────────────────────────────────────────────────────────
@@ -383,6 +399,54 @@ def set_json_file():
     SETTINGS['custom_dict_path'] = path
     _write_settings(SETTINGS)
     return jsonify({'ok': True, 'count': len(DICTIONARY), 'path': path})
+
+# ── Notes memory endpoints ───────────────────────────────────────────────────
+@app.route('/notes-memory', methods=['GET'])
+def get_notes_memory():
+    return jsonify(NOTES_MEMORY)
+
+@app.route('/notes-memory/update', methods=['POST'])
+def update_notes_memory():
+    global NOTES_MEMORY
+    try:
+        updates = request.json
+        for key, val in updates.items():
+            k = key.lower().strip()
+            if val:
+                NOTES_MEMORY[k] = val
+            else:
+                NOTES_MEMORY.pop(k, None)
+        _write_notes_memory(NOTES_MEMORY)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/notes-memory/save', methods=['POST'])
+def save_notes_memory():
+    global NOTES_MEMORY
+    try:
+        NOTES_MEMORY = request.json or {}
+        _write_notes_memory(NOTES_MEMORY)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/settings/load-notes-file', methods=['POST'])
+def load_notes_file():
+    global NOTES_MEMORY
+    try:
+        path = request.json.get('path', '').strip()
+        if not os.path.exists(path):
+            return jsonify({'ok': False, 'error': 'File not found: ' + path}), 400
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return jsonify({'ok': False, 'error': 'JSON file must contain an object'}), 400
+        NOTES_MEMORY = {k.lower().strip(): v for k, v in data.items()}
+        _write_notes_memory(NOTES_MEMORY)
+        return jsonify({'ok': True, 'count': len(NOTES_MEMORY), 'notes': NOTES_MEMORY})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
 
 # ── Chrome extension endpoints ───────────────────────────────────────────────
 @app.route('/extension/parse', methods=['POST'])
