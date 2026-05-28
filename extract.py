@@ -49,6 +49,16 @@ COMBOS = {
     },
 }
 
+COMBOS_WITH_BISCUITS_RAHA = {
+    "kebbeh zghertawiyeh combo",
+    "taouk combo",
+    "meat combo",
+    "kafta combo",
+    "mixed grill combo",
+    "vegan combo",
+    "kebbe tray combo",
+}
+
 
 def _format_qty(total):
     whole = int(total)
@@ -120,6 +130,19 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'is_raw':           False,
             'arabic_name':      item_name,
         })
+
+    if combo_name.lower().strip() in COMBOS_WITH_BISCUITS_RAHA:
+        result.append({
+            'qty':              _format_qty(combo_qty),
+            'name':             'Biscuits & Raha',
+            'variant':          None,
+            'add_ons':          [],
+            'original_add_ons': [],
+            'category':         'Combos',
+            'is_raw':           False,
+            'arabic_name':      'بسكوت وراحة قطعتين مطبقين',
+        })
+
     return result
 
 def _items(lines):
