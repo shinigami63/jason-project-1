@@ -56,6 +56,7 @@ DEFAULT_DICTIONARY = {
     "djej w batata bil forn": "دجاج وبطاطا بالفرن",
     "fassoulia bi lahme & rice": "فاصوليا باللحمة وأرز",
     "fattouch": "فتوش",
+    "fattoush": "فتوش",
     "fawaregh": "فوارغ",
     "french fries": "بطاطا مقلية",
     "fried fawaregh": "فوارغ مقلية",
