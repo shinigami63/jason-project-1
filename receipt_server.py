@@ -468,26 +468,6 @@ def extension_pending():
     PENDING_ORDER = None
     return jsonify(order) if order else jsonify(None)
 
-@app.route('/self-update', methods=['POST'])
-def self_update():
-    if getattr(sys, 'frozen', False):
-        return jsonify({'ok': False, 'error': 'Cannot update a compiled app — replace the .exe manually.'})
-    import urllib.request
-    files = {
-        'ui.html':          'https://raw.githubusercontent.com/shinigami63/jason-project-1/master/ui.html',
-        'receipt_server.py':'https://raw.githubusercontent.com/shinigami63/jason-project-1/master/receipt_server.py',
-    }
-    updated = []
-    try:
-        base = os.path.dirname(os.path.abspath(__file__))
-        for name, url in files.items():
-            dest = os.path.join(base, name)
-            urllib.request.urlretrieve(url, dest)
-            updated.append(name)
-        return jsonify({'ok': True, 'updated': updated})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)})
-
 @app.after_request
 def add_cors(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
