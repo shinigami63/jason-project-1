@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: kebbet-zamen
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python receipt_server.py
+    envVars:
+      - key: PORT
+        value: 10000
