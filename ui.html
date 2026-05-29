@@ -472,24 +472,6 @@ function autoLearnCorrections() {
     }).catch(() => {});
   }
 
-  const noteUpdates = {};
-  document.querySelectorAll('.item-card').forEach(card => {
-    const id = card.id.replace('item-', '');
-    const en = get(`en${id}`).toLowerCase().trim();
-    if (!en) return;
-    const manualNotes = [...card.querySelectorAll('.note-input:not([data-original])')]
-      .map(inp => inp.value.trim()).filter(Boolean);
-    noteUpdates[en] = manualNotes;
-  });
-  if (Object.keys(noteUpdates).length > 0) {
-    fetch('/notes-memory/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(noteUpdates)
-    }).then(r => r.json()).then(d => {
-      if (d.ok) notesMemory = { ...notesMemory, ...noteUpdates };
-    }).catch(() => {});
-  }
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
