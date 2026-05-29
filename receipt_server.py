@@ -564,7 +564,8 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 
 # ── Launch ────────────────────────────────────────────────────────────────────
 def run_flask(host='127.0.0.1'):
-    app.run(host=host, port=5001, debug=False, use_reloader=False)
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host=host, port=port, debug=False, use_reloader=False)
 
 if __name__ == '__main__':
     if _HAS_WEBVIEW:
