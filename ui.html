@@ -207,6 +207,27 @@
     </div>
 
     <div class="sp-section">
+      <h3>Comment Translations</h3>
+      <p class="sp-note">Automatic add-ons from Toters orders and their Arabic translations. The app learns these as you correct them. You can review, edit, or add entries here.</p>
+      <input class="dict-search" id="prefsSearch" placeholder="Search comments..." oninput="filterPrefs()">
+      <table class="dict-table">
+        <thead>
+          <tr>
+            <th>Toters Comment (English)</th>
+            <th>Arabic Translation</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="prefsBody"></tbody>
+      </table>
+      <div class="dict-add-row">
+        <input id="newPrefEn" placeholder="english comment">
+        <input id="newPrefAr" class="ar" placeholder="الترجمة بالعربي">
+        <button class="btn-dict-add" onclick="addPrefRow()">+ Add</button>
+      </div>
+    </div>
+
+    <div class="sp-section">
       <h3>Notes Memory</h3>
       <input class="dict-search" id="notesSearch" placeholder="Search items..." oninput="filterNotes()">
       <table class="dict-table">
@@ -248,8 +269,10 @@
 let parsedOrder = null;
 let itemCount = 0;
 let dictData = {};
+let prefsData = {};
 let settingsData = {};
 let dictFilter = '';
+let prefsFilter = '';
 let notesMemory = {};
 let notesMemoryData = {};
 let notesFilter = '';
@@ -472,17 +495,20 @@ function autoLearnCorrections() {
 // ── Settings panel ────────────────────────────────────────────────────────────
 async function openSettings() {
   try {
-    const [dr, sr, nr] = await Promise.all([fetch('/dictionary'), fetch('/settings'), fetch('/notes-memory')]);
-    dictData       = await dr.json();
-    settingsData   = await sr.json();
+    const [dr, sr, nr, pr] = await Promise.all([fetch('/dictionary'), fetch('/settings'), fetch('/notes-memory'), fetch('/preferences')]);
+    dictData        = await dr.json();
+    settingsData    = await sr.json();
     notesMemoryData = (await nr.json()) || {};
+    prefsData       = (await pr.json()) || {};
   } catch(e) {
     dictData        = {};
     settingsData    = { branch: 'الأشرفية' };
     notesMemoryData = {};
+    prefsData       = {};
   }
   renderBranch();
   renderDict();
+  renderPrefs();
   renderNotes();
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
@@ -579,6 +605,69 @@ function addDictRow() {
   document.getElementById('dictSearch').value = '';
   dictFilter = '';
   renderDict();
+}
+
+// ── Comment translations (preferences) panel ─────────────────────────────────
+function renderPrefs() {
+  const tbody = document.getElementById('prefsBody');
+  if (!tbody) return;
+  const rows = Object.entries(prefsData)
+    .filter(([k, v]) => !prefsFilter || k.includes(prefsFilter) || v.toLowerCase().includes(prefsFilter))
+    .sort(([a], [b]) => a.localeCompare(b));
+  tbody.innerHTML = '';
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);font-size:13px;padding:8px 4px;">No saved translations yet.</td></tr>';
+    return;
+  }
+  rows.forEach(([en, ar]) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input class="dict-input" value="${escHtml(en)}" data-key="${escHtml(en)}" onchange="updatePrefKey(this,'${escHtml(en)}')" onblur="updatePrefKey(this,'${escHtml(en)}')"></td>
+      <td><input class="dict-input ar" value="${escHtml(ar)}" data-en="${escHtml(en)}" onchange="updatePrefVal(this)" onblur="updatePrefVal(this)"></td>
+      <td><button class="dict-del" onclick="deletePrefRow(${JSON.stringify(en)})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterPrefs() {
+  prefsFilter = document.getElementById('prefsSearch').value.toLowerCase().trim();
+  renderPrefs();
+}
+
+function updatePrefKey(input, oldKey) {
+  const newKey = input.value.toLowerCase().trim();
+  if (!newKey || newKey === oldKey) return;
+  const val = prefsData[oldKey];
+  delete prefsData[oldKey];
+  prefsData[newKey] = val;
+  input.dataset.key = newKey;
+  const row = input.closest('tr');
+  if (row) { const arInput = row.querySelector('.dict-input.ar'); if (arInput) arInput.dataset.en = newKey; }
+}
+
+function updatePrefVal(input) {
+  const en = input.dataset.en;
+  if (en) prefsData[en] = input.value.trim();
+}
+
+function deletePrefRow(en) {
+  delete prefsData[en];
+  renderPrefs();
+}
+
+function addPrefRow() {
+  const enEl = document.getElementById('newPrefEn');
+  const arEl = document.getElementById('newPrefAr');
+  const en = enEl.value.trim().toLowerCase();
+  const ar = arEl.value.trim();
+  if (!en || !ar) return;
+  prefsData[en] = ar;
+  enEl.value = '';
+  arEl.value = '';
+  document.getElementById('prefsSearch').value = '';
+  prefsFilter = '';
+  renderPrefs();
 }
 
 // ── Notes memory panel ────────────────────────────────────────────────────────
@@ -772,13 +861,14 @@ async function saveSettings() {
   const statusEl = document.getElementById('spStatus');
   statusEl.textContent = 'Saving...';
   try {
-    const [dr, sr, nr] = await Promise.all([
-      fetch('/dictionary/save',   { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dictData) }),
-      fetch('/settings/save',     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsData) }),
-      fetch('/notes-memory/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(notesMemoryData) })
+    const [dr, sr, nr, pr] = await Promise.all([
+      fetch('/dictionary/save',    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dictData) }),
+      fetch('/settings/save',      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsData) }),
+      fetch('/notes-memory/save',  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(notesMemoryData) }),
+      fetch('/preferences/save',   { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prefsData) })
     ]);
-    const [dd, sd, nd] = await Promise.all([dr.json(), sr.json(), nr.json()]);
-    if (dd.ok && sd.ok && nd.ok) {
+    const [dd, sd, nd, pd] = await Promise.all([dr.json(), sr.json(), nr.json(), pr.json()]);
+    if (dd.ok && sd.ok && nd.ok && pd.ok) {
       notesMemory = { ...notesMemoryData };
       statusEl.textContent = '✅ Saved!';
       setTimeout(() => { statusEl.textContent = ''; closeSettings(); }, 800);

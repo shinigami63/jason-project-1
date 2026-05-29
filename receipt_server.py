@@ -346,6 +346,16 @@ def update_preferences():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
+@app.route('/preferences/save', methods=['POST'])
+def save_preferences():
+    global PREFERENCES
+    try:
+        PREFERENCES = {k.lower().strip(): v for k, v in request.json.items() if k and v}
+        _write_preferences(PREFERENCES)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
 @app.route('/settings', methods=['GET'])
 def get_settings():
     return jsonify(SETTINGS)
