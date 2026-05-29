@@ -227,37 +227,6 @@
       </div>
     </div>
 
-    <div class="sp-section">
-      <h3>Notes Memory</h3>
-      <input class="dict-search" id="notesSearch" placeholder="Search items..." oninput="filterNotes()">
-      <table class="dict-table">
-        <thead>
-          <tr>
-            <th>Item (English)</th>
-            <th>Notes (separate multiple with |)</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="notesBody"></tbody>
-      </table>
-      <div class="dict-add-row">
-        <input id="newNoteEn" placeholder="item name">
-        <input id="newNoteVal" placeholder="note 1 | note 2">
-        <button class="btn-dict-add" onclick="addNotesMemoryRow()">+ Add</button>
-      </div>
-      <div class="dict-add-row" style="margin-top:4px;">
-        <button class="btn-dict-add" onclick="exportNotes()">⬇ Export</button>
-        <button class="btn-dict-add" onclick="importNotesPrompt()">⬆ Import</button>
-      </div>
-      <div id="notesFileRow" style="display:none;margin-top:8px;">
-        <div class="json-file-row">
-          <input class="json-file-input" id="notesFilePath" placeholder="Absolute path to notes JSON file…">
-          <button class="btn-json-load" onclick="importNotesFile()">Load</button>
-        </div>
-        <div class="json-file-status" id="notesFileStatus"></div>
-      </div>
-    </div>
-
     <div class="sp-footer">
       <button class="btn-save-settings" onclick="saveSettings()">Save Changes</button>
       <span class="sp-save-status" id="spStatus"></span>
@@ -273,9 +242,6 @@ let prefsData = {};
 let settingsData = {};
 let dictFilter = '';
 let prefsFilter = '';
-let notesMemory = {};
-let notesMemoryData = {};
-let notesFilter = '';
 
 // ── Main app ──────────────────────────────────────────────────────────────────
 async function parseOrder() {
@@ -338,12 +304,6 @@ function addItemRow(item = null) {
       <button class="note-del" onclick="this.closest('.note-row').remove()">✕</button>
     </div>`).join('');
 
-  const savedNotes = notesMemory[(en || '').toLowerCase().trim()] || [];
-  const savedNotesHtml = savedNotes.map(n => `
-    <div class="note-row">
-      <input type="text" class="note-input" placeholder="Kitchen note" value="${escHtml(n)}">
-      <button class="note-del" onclick="this.closest('.note-row').remove()">✕</button>
-    </div>`).join('');
 
   const div = document.createElement('div');
   div.className = 'item-card';
@@ -358,7 +318,7 @@ function addItemRow(item = null) {
       <button class="remove-btn" onclick="removeItem(${i})" title="Remove">✕</button>
     </div>
     <div class="item-notes" id="notes${i}">
-      ${notesHtml}${savedNotesHtml}
+      ${notesHtml}
       <button class="btn-add-note" onclick="addNoteRow(${i})">+ note</button>
     </div>`;
   document.getElementById('itemsList').appendChild(div);
@@ -477,25 +437,20 @@ function autoLearnCorrections() {
 // ── Settings panel ────────────────────────────────────────────────────────────
 async function openSettings() {
   try {
-    const [dr, sr, nr, pr] = await Promise.all([fetch('/dictionary'), fetch('/settings'), fetch('/notes-memory'), fetch('/preferences')]);
-    dictData        = await dr.json();
-    settingsData    = await sr.json();
-    notesMemoryData = (await nr.json()) || {};
-    prefsData       = (await pr.json()) || {};
+    const [dr, sr, pr] = await Promise.all([fetch('/dictionary'), fetch('/settings'), fetch('/preferences')]);
+    dictData     = await dr.json();
+    settingsData = await sr.json();
+    prefsData    = (await pr.json()) || {};
   } catch(e) {
-    dictData        = {};
-    settingsData    = { branch: 'الأشرفية' };
-    notesMemoryData = {};
-    prefsData       = {};
+    dictData     = {};
+    settingsData = { branch: 'الأشرفية' };
+    prefsData    = {};
   }
   renderBranch();
   renderDict();
   renderPrefs();
-  renderNotes();
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
-  document.getElementById('notesFileStatus').textContent = '';
-  document.getElementById('notesFileRow').style.display = 'none';
   document.getElementById('spStatus').textContent = '';
   document.getElementById('overlay').classList.add('open');
 }
@@ -652,110 +607,6 @@ function addPrefRow() {
   renderPrefs();
 }
 
-// ── Notes memory panel ────────────────────────────────────────────────────────
-function renderNotes() {
-  const tbody = document.getElementById('notesBody');
-  if (!tbody) return;
-  const rows = Object.entries(notesMemoryData)
-    .filter(([k, v]) => !notesFilter || k.toLowerCase().includes(notesFilter) || v.join(' ').toLowerCase().includes(notesFilter))
-    .sort(([a], [b]) => a.localeCompare(b));
-  tbody.innerHTML = '';
-  if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted);font-size:13px;padding:8px 4px;">No saved notes yet.</td></tr>';
-    return;
-  }
-  rows.forEach(([en, notes]) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input class="dict-input" value="${escHtml(en)}" data-key="${escHtml(en)}" onchange="updateNoteKey(this,'${escHtml(en)}')" onblur="updateNoteKey(this,'${escHtml(en)}')"></td>
-      <td><input class="dict-input" value="${escHtml(notes.join(' | '))}" data-key="${escHtml(en)}" onchange="updateNoteVal(this)" onblur="updateNoteVal(this)"></td>
-      <td><button class="dict-del" onclick="deleteNoteRow(${JSON.stringify(en)})">✕</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function updateNoteKey(input, oldKey) {
-  const newKey = input.value.trim().toLowerCase();
-  if (!newKey || newKey === oldKey) return;
-  const val = notesMemoryData[oldKey];
-  delete notesMemoryData[oldKey];
-  notesMemoryData[newKey] = val;
-  input.dataset.key = newKey;
-  const row = input.closest('tr');
-  if (row) {
-    const valInput = row.querySelectorAll('.dict-input')[1];
-    if (valInput) valInput.dataset.key = newKey;
-  }
-}
-
-function updateNoteVal(input) {
-  const key = input.dataset.key;
-  if (!key) return;
-  notesMemoryData[key] = input.value.split('|').map(s => s.trim()).filter(Boolean);
-}
-
-function filterNotes() {
-  notesFilter = document.getElementById('notesSearch').value.toLowerCase().trim();
-  renderNotes();
-}
-
-function deleteNoteRow(en) {
-  delete notesMemoryData[en];
-  renderNotes();
-}
-
-function addNotesMemoryRow() {
-  const enEl = document.getElementById('newNoteEn');
-  const valEl = document.getElementById('newNoteVal');
-  const en = enEl.value.trim().toLowerCase();
-  const notes = valEl.value.split('|').map(s => s.trim()).filter(Boolean);
-  if (!en || notes.length === 0) return;
-  notesMemoryData[en] = notes;
-  enEl.value = '';
-  valEl.value = '';
-  document.getElementById('notesSearch').value = '';
-  notesFilter = '';
-  renderNotes();
-}
-
-function exportNotes() {
-  const blob = new Blob([JSON.stringify(notesMemoryData, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'notes_memory.json';
-  a.click();
-}
-
-function importNotesPrompt() {
-  const row = document.getElementById('notesFileRow');
-  row.style.display = row.style.display === 'none' ? 'block' : 'none';
-}
-
-async function importNotesFile() {
-  const path = document.getElementById('notesFilePath').value.trim();
-  const statusEl = document.getElementById('notesFileStatus');
-  if (!path) return;
-  statusEl.textContent = 'Loading…';
-  try {
-    const res = await fetch('/settings/load-notes-file', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      notesMemoryData = data.notes;
-      notesMemory     = { ...data.notes };
-      renderNotes();
-      statusEl.textContent = `✅ Loaded ${data.count} entries`;
-    } else {
-      statusEl.textContent = '⚠ ' + (data.error || 'Failed');
-    }
-  } catch(e) {
-    statusEl.textContent = '⚠ ' + e.message;
-  }
-}
 
 // ── Poll for orders from Chrome extension ─────────────────────────────────
 setInterval(async () => {
@@ -843,15 +694,13 @@ async function saveSettings() {
   const statusEl = document.getElementById('spStatus');
   statusEl.textContent = 'Saving...';
   try {
-    const [dr, sr, nr, pr] = await Promise.all([
-      fetch('/dictionary/save',    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dictData) }),
-      fetch('/settings/save',      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsData) }),
-      fetch('/notes-memory/save',  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(notesMemoryData) }),
-      fetch('/preferences/save',   { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prefsData) })
+    const [dr, sr, pr] = await Promise.all([
+      fetch('/dictionary/save',  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dictData) }),
+      fetch('/settings/save',    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsData) }),
+      fetch('/preferences/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prefsData) })
     ]);
-    const [dd, sd, nd, pd] = await Promise.all([dr.json(), sr.json(), nr.json(), pr.json()]);
-    if (dd.ok && sd.ok && nd.ok && pd.ok) {
-      notesMemory = { ...notesMemoryData };
+    const [dd, sd, pd] = await Promise.all([dr.json(), sr.json(), pr.json()]);
+    if (dd.ok && sd.ok && pd.ok) {
       statusEl.textContent = '✅ Saved!';
       setTimeout(() => { statusEl.textContent = ''; closeSettings(); }, 800);
     } else {
@@ -861,8 +710,6 @@ async function saveSettings() {
     statusEl.textContent = '⚠ ' + e.message;
   }
 }
-// Load notes memory at startup so auto-fill works before first order
-fetch('/notes-memory').then(r => r.json()).then(d => { notesMemory = d || {}; }).catch(() => {});
 </script>
 </body>
 </html>
