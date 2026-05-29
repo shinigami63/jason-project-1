@@ -1,0 +1,13 @@
+{
+  "name": "Kebbet Zamen",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "postCreateCommand": "pip install flask",
+  "postStartCommand": "python receipt_server.py",
+  "forwardPorts": [5001],
+  "portsAttributes": {
+    "5001": {
+      "label": "Kebbet Zamen App",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}
