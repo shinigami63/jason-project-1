@@ -87,8 +87,8 @@ COMBO_FIXED_ITEMS = {
         {"name": "French Fries", "portion": 2.0},
     ],
     "vegan combo": [
-        {"name": "Pumpkin Kebbeh", "portion": 1.0},
-        {"name": "French Fries",   "portion": 0.5},
+        {"name": "Pumpkin Kebbeh (4 pcs)", "portion": 1.0},
+        {"name": "French Fries",           "portion": 0.5},
     ],
     "kebbe tray combo": [
         {"name": "Cucumber With Laban", "portion": 0.5},

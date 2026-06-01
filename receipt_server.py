@@ -126,6 +126,7 @@ DEFAULT_DICTIONARY = {
     "pickles": "كبيس",
     "potatoes with garlic & coriander": "بطاطا بالثوم والكزبرة",
     "pumpkin kebbeh": "كبة لقطين",
+    "pumpkin kebbeh (4 pcs)": "كبة لقطين (4 حبات)",
     "pumpkin kebbeh in a tray": "كبة لقطين بالصينية",
     "raheb eggplant": "بذنجان الراهب",
     "ras asfour": "لحمة رأس عصفور",
