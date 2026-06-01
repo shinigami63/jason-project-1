@@ -249,6 +249,8 @@ def translate_add_ons(add_ons_list):
 
 def translate_items(items):
     for item in items:
+        if item.get('is_bag_header'):
+            continue
         item['add_ons']     = translate_add_ons(item.get('add_ons', []))
         item['arabic_name'] = translate_word(item['name'])
         name_key = item['name'].lower().strip()
@@ -425,6 +427,9 @@ def add_cors(response):
 def build_receipt(d):
     rows = ''
     for item in d['items']:
+        if item.get('is_bag_header'):
+            rows += f'\n        <div class="bag-hd">{item["arabic_name"]}</div>'
+            continue
         notes_html = ''.join(
             f'<div class="note">{c}</div>'
             for c in item.get('comments', []) if c
@@ -473,6 +478,7 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 .qty{{background:#000;color:#fff;font-weight:900;font-size:16px;padding:0 2mm;border-radius:2px;flex-shrink:0;min-width:8mm;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .iname{{font-weight:700;font-size:16px}}
 .note{{font-size:14px;font-weight:700;color:#000;margin-top:1mm;margin-right:6mm;border-right:3px solid #000;padding-right:1.5mm}}
+.bag-hd{{background:#000;color:#fff;text-align:center;padding:2mm;font-size:14px;font-weight:900;margin:3mm 0 0;letter-spacing:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .ft{{text-align:center;margin-top:4mm;padding-top:3mm;border-top:2px dashed #000;font-size:10px;color:#000}}
 .ft b{{font-size:13px;color:#000}}
 .day{{font-size:20px;font-weight:900;text-align:center;margin-top:2mm}}

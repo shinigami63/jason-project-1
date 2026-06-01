@@ -13,39 +13,37 @@ RAW_MEAT_ITEMS = {
 
 COMBOS = {
     "kebbeh zghertawiyeh combo": {
+        # kebbeh is a customer choice (Fat / Meat / Labneh)
         "kebbeh": 1.0, "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "taouk combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        # taouk and fries are fixed; only salad/mezza/drink are customer choices
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "meat combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "kafta combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "mixed grill combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "kebbe lovers box": {
-        "kebbeh": 3.0, "salad": 1.0, "fries": 1.0,
-        "french fries": 1.0, "mezza": 1.0,
+        # all 3 kebbeh types are fixed; only salad/mezza are customer choices
+        "salad": 1.0, "mezza": 1.0,
     },
     "family sharing combo": {
-        "mixed grill": 1.0, "salad": 2.0, "mezza": 2.0,
-        "fries": 2.0, "french fries": 2.0, "kebbeh": 2.0,
+        # mixed grill and fries are fixed; salad/mezza/kebbeh type are choices
+        "salad": 2.0, "mezza": 2.0, "kebbeh": 2.0,
     },
     "vegan combo": {
-        "kebbeh": 1.0, "fries": 0.5, "french fries": 0.5,
+        # pumpkin kebbeh and fries are fixed; only salad/mezza/drink are choices
         "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "kebbe tray combo": {
-        "kebbeh": 1.0, "cucumber": 0.5, "mezza": 0.5,
-        "drink": 1.0, "water": 1.0,
+        # cucumber is fixed; kebbeh type (onions/meat stuffed) and mezza/drink are choices
+        "kebbeh": 1.0, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
 }
 
@@ -57,6 +55,44 @@ COMBOS_WITH_BISCUITS_RAHA = {
     "mixed grill combo",
     "vegan combo",
     "kebbe tray combo",
+}
+
+# Fixed items always included in a combo that never appear as "Choose X > Y"
+# on the Toters page. Listed first so they print at the top of each bag.
+COMBO_FIXED_ITEMS = {
+    "taouk combo": [
+        {"name": "Taouk",        "portion": 1.0},
+        {"name": "French Fries", "portion": 0.5},
+    ],
+    "meat combo": [
+        {"name": "Grilled Meat", "portion": 1.0},
+        {"name": "French Fries", "portion": 0.5},
+    ],
+    "kafta combo": [
+        {"name": "Grilled Kafta", "portion": 1.0},
+        {"name": "French Fries",  "portion": 0.5},
+    ],
+    "mixed grill combo": [
+        {"name": "Mixed Grills", "portion": 1.0},
+        {"name": "French Fries", "portion": 0.5},
+    ],
+    "kebbe lovers box": [
+        {"name": "Kebbeh Zghertawiye (Fat)",    "portion": 1.0},
+        {"name": "Kebbeh Zghertawiye (Meat)",   "portion": 1.0},
+        {"name": "Kebbeh Zghertawiye (Labneh)", "portion": 1.0},
+        {"name": "French Fries",                "portion": 1.0},
+    ],
+    "family sharing combo": [
+        {"name": "Mixed Grills", "portion": 1.0},
+        {"name": "French Fries", "portion": 2.0},
+    ],
+    "vegan combo": [
+        {"name": "Pumpkin Kebbeh", "portion": 1.0},
+        {"name": "French Fries",   "portion": 0.5},
+    ],
+    "kebbe tray combo": [
+        {"name": "Cucumber With Laban", "portion": 0.5},
+    ],
 }
 
 
@@ -91,15 +127,37 @@ def _prepare_by(text):
     m = re.search(r'Prepare by\s*\n?([\w]+\s+\d+,\s*\d+:\d+\s*(?:AM|PM))', text)
     return m.group(1).strip() if m else ''
 
+_ARABIC_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠']
+
+def _make_combo_item(name, portion):
+    return {
+        'qty':              _format_qty(portion),
+        'name':             name,
+        'variant':          None,
+        'add_ons':          [],
+        'original_add_ons': [],
+        'category':         'Combos',
+        'is_raw':           False,
+        'arabic_name':      name,
+    }
+
 def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
     try:
-        combo_qty = float(combo_qty_str)
+        combo_qty = int(float(combo_qty_str))
     except (TypeError, ValueError):
-        combo_qty = 1.0
+        combo_qty = 1
 
-    combo_def = COMBOS.get(combo_name.lower().strip(), {})
-    result    = []
+    combo_name_lower = combo_name.lower().strip()
+    combo_def = COMBOS.get(combo_name_lower, {})
 
+    # Build the item list for a single bag
+    per_bag = []
+
+    # 1. Fixed items always in this combo (not selectable by customer on Toters)
+    for fixed in COMBO_FIXED_ITEMS.get(combo_name_lower, []):
+        per_bag.append(_make_combo_item(fixed['name'], fixed['portion']))
+
+    # 2. Customer-chosen items (Choose X > Y lines)
     for j in range(start_i, len(lines)):
         if lines[j] == 'Qty':
             break
@@ -109,7 +167,6 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
         this_type = m.group(1).strip().lower()
         item_name = m.group(2).strip()
 
-        # Portion from definition; fallback to Toters' N xpost_add value
         portion = combo_def.get(this_type, None)
         if portion is None:
             portion = 1.0
@@ -118,22 +175,12 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
                 if qm:
                     portion = float(qm.group(1))
 
-        display_qty = _format_qty(combo_qty * portion)
+        per_bag.append(_make_combo_item(item_name, portion))
 
-        result.append({
-            'qty':              display_qty,
-            'name':             item_name,
-            'variant':          None,
-            'add_ons':          [],
-            'original_add_ons': [],
-            'category':         'Combos',
-            'is_raw':           False,
-            'arabic_name':      item_name,
-        })
-
-    if combo_name.lower().strip() in COMBOS_WITH_BISCUITS_RAHA:
-        result.append({
-            'qty':              _format_qty(combo_qty),
+    # 3. Biscuits & Raha (always appended last for applicable combos)
+    if combo_name_lower in COMBOS_WITH_BISCUITS_RAHA:
+        per_bag.append({
+            'qty':              '1',
             'name':             'Biscuits & Raha',
             'variant':          None,
             'add_ons':          [],
@@ -143,6 +190,26 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'arabic_name':      'بسكوت وراحة قطعتين مطبقين',
         })
 
+    # Single combo: return flat list with no bag header
+    if combo_qty <= 1:
+        return per_bag
+
+    # Multiple combos: split into clearly labelled bags
+    result = []
+    for n in range(1, combo_qty + 1):
+        ar_num = _ARABIC_NUMS[n - 1] if n <= len(_ARABIC_NUMS) else str(n)
+        result.append({
+            'qty':              '',
+            'name':             f'Bag {n}',
+            'arabic_name':      f'كيس {ar_num}',
+            'variant':          None,
+            'add_ons':          [],
+            'original_add_ons': [],
+            'category':         'Combos',
+            'is_raw':           False,
+            'is_bag_header':    True,
+        })
+        result.extend(per_bag)
     return result
 
 def _items(lines):
