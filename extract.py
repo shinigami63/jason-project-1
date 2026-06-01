@@ -190,20 +190,21 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'arabic_name':      'بسكوت وراحة قطعتين مطبقين',
         })
 
-    # Single combo: return flat list with no bag header
-    if combo_qty <= 1:
-        return per_bag
-
-    # Multiple combos: split into clearly labelled bags.
+    # Always wrap in a bag frame — even qty=1 gets a "كيس" frame.
+    # Single combos use plain "كيس"; multiples use "كيس ١", "كيس ٢", etc.
     # bag_size tells the receipt renderer exactly how many items follow
     # this header so it can draw a tight frame around each bag.
     result = []
     for n in range(1, combo_qty + 1):
-        ar_num = _ARABIC_NUMS[n - 1] if n <= len(_ARABIC_NUMS) else str(n)
+        if combo_qty == 1:
+            ar_label = 'كيس'
+        else:
+            ar_num = _ARABIC_NUMS[n - 1] if n <= len(_ARABIC_NUMS) else str(n)
+            ar_label = f'كيس {ar_num}'
         result.append({
             'qty':              '',
             'name':             f'Bag {n}',
-            'arabic_name':      f'كيس {ar_num}',
+            'arabic_name':      ar_label,
             'variant':          None,
             'add_ons':          [],
             'original_add_ons': [],
