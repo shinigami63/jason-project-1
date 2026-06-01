@@ -194,7 +194,9 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
     if combo_qty <= 1:
         return per_bag
 
-    # Multiple combos: split into clearly labelled bags
+    # Multiple combos: split into clearly labelled bags.
+    # bag_size tells the receipt renderer exactly how many items follow
+    # this header so it can draw a tight frame around each bag.
     result = []
     for n in range(1, combo_qty + 1):
         ar_num = _ARABIC_NUMS[n - 1] if n <= len(_ARABIC_NUMS) else str(n)
@@ -208,6 +210,7 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'category':         'Combos',
             'is_raw':           False,
             'is_bag_header':    True,
+            'bag_size':         len(per_bag),
         })
         result.extend(per_bag)
     return result

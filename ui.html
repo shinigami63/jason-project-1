@@ -299,6 +299,7 @@ function addItemRow(item = null) {
     div.dataset.bagHeader = 'true';
     div.dataset.arabicName = item.arabic_name || '';
     div.dataset.itemName = item.name || '';
+    div.dataset.bagSize = item.bag_size ?? 0;
     div.innerHTML = `<div class="bag-hd-card">${escHtml(item.arabic_name)}</div>`;
     document.getElementById('itemsList').appendChild(div);
     return;
@@ -372,7 +373,7 @@ async function printReceipt() {
   document.querySelectorAll('.item-card').forEach(card => {
     const id = card.id.replace('item-', '');
     if (card.dataset.bagHeader) {
-      items.push({ is_bag_header: true, arabic_name: card.dataset.arabicName, qty: '', name: card.dataset.itemName, comments: [] });
+      items.push({ is_bag_header: true, arabic_name: card.dataset.arabicName, qty: '', name: card.dataset.itemName, bag_size: parseInt(card.dataset.bagSize) || 0, comments: [] });
       return;
     }
     const qty = get(`qty${id}`);
