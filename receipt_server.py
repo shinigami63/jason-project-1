@@ -126,6 +126,7 @@ DEFAULT_DICTIONARY = {
     "pickles": "كبيس",
     "potatoes with garlic & coriander": "بطاطا بالثوم والكزبرة",
     "pumpkin kebbeh": "كبة لقطين",
+    "pumpkin kebbeh (4 pcs)": "كبة لقطين (4 حبات)",
     "pumpkin kebbeh in a tray": "كبة لقطين بالصينية",
     "raheb eggplant": "بذنجان الراهب",
     "ras asfour": "لحمة رأس عصفور",
@@ -424,24 +425,28 @@ def add_cors(response):
     return response
 
 # ── Receipt builder ───────────────────────────────────────────────────────────
+def _item_html(item):
+    notes_html = ''.join(
+        f'<div class="note">{c}</div>'
+        for c in item.get('comments', []) if c
+    )
+    return f'''<div class="item"><div class="row"><span class="qty">{item["qty"]}</span><span class="iname">{item["arabic_name"]}</span></div>{notes_html}</div>'''
+
 def build_receipt(d):
+    items = d['items']
     rows = ''
-    for item in d['items']:
+    idx = 0
+    while idx < len(items):
+        item = items[idx]
         if item.get('is_bag_header'):
-            rows += f'\n        <div class="bag-hd">{item["arabic_name"]}</div>'
-            continue
-        notes_html = ''.join(
-            f'<div class="note">{c}</div>'
-            for c in item.get('comments', []) if c
-        )
-        rows += f'''
-        <div class="item">
-          <div class="row">
-            <span class="qty">{item["qty"]}</span>
-            <span class="iname">{item["arabic_name"]}</span>
-          </div>
-          {notes_html}
-        </div>'''
+            bag_size = item.get('bag_size', 0)
+            bag_slice = items[idx + 1: idx + 1 + bag_size]
+            idx += 1 + bag_size
+            inner = ''.join(_item_html(bi) for bi in bag_slice)
+            rows += f'<div class="bag-frame"><div class="bag-title">{item["arabic_name"]}</div>{inner}</div>'
+        else:
+            rows += _item_html(item)
+            idx += 1
 
     EN_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     try:
@@ -473,12 +478,16 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
 .il{{color:#000}}
 .iv{{font-weight:700;font-size:13px}}
 .ih{{background:#000;color:#fff;text-align:center;padding:1.5mm;font-size:12px;font-weight:700;margin:2mm 0 0}}
-.item{{padding:2.5mm 0;border-bottom:1px dotted #000}}
+.item{{padding:2.5mm 2mm;border-bottom:1px dotted #000}}
+.item:last-child{{border-bottom:none}}
 .row{{display:flex;align-items:center;gap:2mm}}
 .qty{{background:#000;color:#fff;font-weight:900;font-size:16px;padding:0 2mm;border-radius:2px;flex-shrink:0;min-width:8mm;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .iname{{font-weight:700;font-size:16px}}
 .note{{font-size:14px;font-weight:700;color:#000;margin-top:1mm;margin-right:6mm;border-right:3px solid #000;padding-right:1.5mm}}
-.bag-hd{{background:#000;color:#fff;text-align:center;padding:2mm;font-size:14px;font-weight:900;margin:3mm 0 0;letter-spacing:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.bag-frame{{border:2.5px solid #000;border-radius:3px;margin:3mm 0 2mm;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.bag-title{{background:#000;color:#fff;text-align:center;padding:2.5mm;font-size:15px;font-weight:900;letter-spacing:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.bag-frame .item{{padding:2.5mm 2mm;border-bottom:1px dotted #888}}
+.bag-frame .item:last-child{{border-bottom:none}}
 .ft{{text-align:center;margin-top:4mm;padding-top:3mm;border-top:2px dashed #000;font-size:10px;color:#000}}
 .ft b{{font-size:13px;color:#000}}
 .day{{font-size:20px;font-weight:900;text-align:center;margin-top:2mm}}
