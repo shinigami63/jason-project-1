@@ -59,6 +59,18 @@ COMBOS_WITH_BISCUITS_RAHA = {
     "kebbe tray combo",
 }
 
+# Fixed items that are always included in a combo but never appear as
+# "Choose X > Y" selections on the Toters page (so they'd be silently dropped).
+COMBO_FIXED_ITEMS = {
+    "vegan combo": [
+        {"name": "Pumpkin Kebbeh", "portion": 1.0},
+        {"name": "French Fries",   "portion": 0.5},
+    ],
+    "kebbe tray combo": [
+        {"name": "Cucumber With Laban", "portion": 0.5},
+    ],
+}
+
 
 def _format_qty(total):
     whole = int(total)
@@ -91,15 +103,37 @@ def _prepare_by(text):
     m = re.search(r'Prepare by\s*\n?([\w]+\s+\d+,\s*\d+:\d+\s*(?:AM|PM))', text)
     return m.group(1).strip() if m else ''
 
+_ARABIC_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠']
+
+def _make_combo_item(name, portion):
+    return {
+        'qty':              _format_qty(portion),
+        'name':             name,
+        'variant':          None,
+        'add_ons':          [],
+        'original_add_ons': [],
+        'category':         'Combos',
+        'is_raw':           False,
+        'arabic_name':      name,
+    }
+
 def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
     try:
-        combo_qty = float(combo_qty_str)
+        combo_qty = int(float(combo_qty_str))
     except (TypeError, ValueError):
-        combo_qty = 1.0
+        combo_qty = 1
 
-    combo_def = COMBOS.get(combo_name.lower().strip(), {})
-    result    = []
+    combo_name_lower = combo_name.lower().strip()
+    combo_def = COMBOS.get(combo_name_lower, {})
 
+    # Build the item list for a single bag
+    per_bag = []
+
+    # 1. Fixed items always in this combo (not selectable by customer on Toters)
+    for fixed in COMBO_FIXED_ITEMS.get(combo_name_lower, []):
+        per_bag.append(_make_combo_item(fixed['name'], fixed['portion']))
+
+    # 2. Customer-chosen items (Choose X > Y lines)
     for j in range(start_i, len(lines)):
         if lines[j] == 'Qty':
             break
@@ -109,7 +143,6 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
         this_type = m.group(1).strip().lower()
         item_name = m.group(2).strip()
 
-        # Portion from definition; fallback to Toters' N xpost_add value
         portion = combo_def.get(this_type, None)
         if portion is None:
             portion = 1.0
@@ -118,22 +151,12 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
                 if qm:
                     portion = float(qm.group(1))
 
-        display_qty = _format_qty(combo_qty * portion)
+        per_bag.append(_make_combo_item(item_name, portion))
 
-        result.append({
-            'qty':              display_qty,
-            'name':             item_name,
-            'variant':          None,
-            'add_ons':          [],
-            'original_add_ons': [],
-            'category':         'Combos',
-            'is_raw':           False,
-            'arabic_name':      item_name,
-        })
-
-    if combo_name.lower().strip() in COMBOS_WITH_BISCUITS_RAHA:
-        result.append({
-            'qty':              _format_qty(combo_qty),
+    # 3. Biscuits & Raha (always appended last for applicable combos)
+    if combo_name_lower in COMBOS_WITH_BISCUITS_RAHA:
+        per_bag.append({
+            'qty':              '1',
             'name':             'Biscuits & Raha',
             'variant':          None,
             'add_ons':          [],
@@ -143,6 +166,26 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'arabic_name':      'بسكوت وراحة قطعتين مطبقين',
         })
 
+    # Single combo: return flat list with no bag header
+    if combo_qty <= 1:
+        return per_bag
+
+    # Multiple combos: split into clearly labelled bags
+    result = []
+    for n in range(1, combo_qty + 1):
+        ar_num = _ARABIC_NUMS[n - 1] if n <= len(_ARABIC_NUMS) else str(n)
+        result.append({
+            'qty':              '',
+            'name':             f'Bag {n}',
+            'arabic_name':      f'كيس {ar_num}',
+            'variant':          None,
+            'add_ons':          [],
+            'original_add_ons': [],
+            'category':         'Combos',
+            'is_raw':           False,
+            'is_bag_header':    True,
+        })
+        result.extend(per_bag)
     return result
 
 def _items(lines):

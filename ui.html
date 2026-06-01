@@ -119,6 +119,8 @@
   .btn-json-reset:hover { border-color: var(--red); color: var(--red); }
   .json-file-status { font-size: 13px; color: var(--muted); margin-top: 8px; min-height: 18px; }
 
+  .bag-hd-card { background: #222; color: #fff; border-radius: 8px; padding: 10px 14px; margin-bottom: 4px; text-align: right; font-size: 16px; font-weight: 900; direction: rtl; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing: 1px; }
+
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
 
@@ -289,6 +291,19 @@ function renderUI(data) {
 }
 
 function addItemRow(item = null) {
+  if (item?.is_bag_header) {
+    const i = itemCount++;
+    const div = document.createElement('div');
+    div.className = 'item-card';
+    div.id = `item-${i}`;
+    div.dataset.bagHeader = 'true';
+    div.dataset.arabicName = item.arabic_name || '';
+    div.dataset.itemName = item.name || '';
+    div.innerHTML = `<div class="bag-hd-card">${escHtml(item.arabic_name)}</div>`;
+    document.getElementById('itemsList').appendChild(div);
+    return;
+  }
+
   const i        = itemCount++;
   const qty      = item?.qty ?? '1';
   const ar       = item?.arabic_name ?? '';
@@ -356,6 +371,10 @@ async function printReceipt() {
   const items = [];
   document.querySelectorAll('.item-card').forEach(card => {
     const id = card.id.replace('item-', '');
+    if (card.dataset.bagHeader) {
+      items.push({ is_bag_header: true, arabic_name: card.dataset.arabicName, qty: '', name: card.dataset.itemName, comments: [] });
+      return;
+    }
     const qty = get(`qty${id}`);
     const ar  = get(`ar${id}`);
     if (!qty || !ar) return;
