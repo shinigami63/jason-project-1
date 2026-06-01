@@ -13,39 +13,37 @@ RAW_MEAT_ITEMS = {
 
 COMBOS = {
     "kebbeh zghertawiyeh combo": {
+        # kebbeh is a customer choice (Fat / Meat / Labneh)
         "kebbeh": 1.0, "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "taouk combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        # taouk and fries are fixed; only salad/mezza/drink are customer choices
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "meat combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "kafta combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "mixed grill combo": {
-        "salad": 0.5, "fries": 0.5, "french fries": 0.5,
-        "mezza": 0.5, "drink": 1.0, "water": 1.0,
+        "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "kebbe lovers box": {
-        "kebbeh": 3.0, "salad": 1.0, "fries": 1.0,
-        "french fries": 1.0, "mezza": 1.0,
+        # all 3 kebbeh types are fixed; only salad/mezza are customer choices
+        "salad": 1.0, "mezza": 1.0,
     },
     "family sharing combo": {
-        "mixed grill": 1.0, "salad": 2.0, "mezza": 2.0,
-        "fries": 2.0, "french fries": 2.0, "kebbeh": 2.0,
+        # mixed grill and fries are fixed; salad/mezza/kebbeh type are choices
+        "salad": 2.0, "mezza": 2.0, "kebbeh": 2.0,
     },
     "vegan combo": {
-        "kebbeh": 1.0, "fries": 0.5, "french fries": 0.5,
+        # pumpkin kebbeh and fries are fixed; only salad/mezza/drink are choices
         "salad": 0.5, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
     "kebbe tray combo": {
-        "kebbeh": 1.0, "cucumber": 0.5, "mezza": 0.5,
-        "drink": 1.0, "water": 1.0,
+        # cucumber is fixed; kebbeh type (onions/meat stuffed) and mezza/drink are choices
+        "kebbeh": 1.0, "mezza": 0.5, "drink": 1.0, "water": 1.0,
     },
 }
 
@@ -59,9 +57,35 @@ COMBOS_WITH_BISCUITS_RAHA = {
     "kebbe tray combo",
 }
 
-# Fixed items that are always included in a combo but never appear as
-# "Choose X > Y" selections on the Toters page (so they'd be silently dropped).
+# Fixed items always included in a combo that never appear as "Choose X > Y"
+# on the Toters page. Listed first so they print at the top of each bag.
 COMBO_FIXED_ITEMS = {
+    "taouk combo": [
+        {"name": "Taouk",        "portion": 1.0},
+        {"name": "French Fries", "portion": 0.5},
+    ],
+    "meat combo": [
+        {"name": "Grilled Meat", "portion": 1.0},
+        {"name": "French Fries", "portion": 0.5},
+    ],
+    "kafta combo": [
+        {"name": "Grilled Kafta", "portion": 1.0},
+        {"name": "French Fries",  "portion": 0.5},
+    ],
+    "mixed grill combo": [
+        {"name": "Mixed Grills", "portion": 1.0},
+        {"name": "French Fries", "portion": 0.5},
+    ],
+    "kebbe lovers box": [
+        {"name": "Kebbeh Zghertawiye (Fat)",    "portion": 1.0},
+        {"name": "Kebbeh Zghertawiye (Meat)",   "portion": 1.0},
+        {"name": "Kebbeh Zghertawiye (Labneh)", "portion": 1.0},
+        {"name": "French Fries",                "portion": 1.0},
+    ],
+    "family sharing combo": [
+        {"name": "Mixed Grills", "portion": 1.0},
+        {"name": "French Fries", "portion": 2.0},
+    ],
     "vegan combo": [
         {"name": "Pumpkin Kebbeh", "portion": 1.0},
         {"name": "French Fries",   "portion": 0.5},
