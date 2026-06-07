@@ -83,7 +83,7 @@ COMBO_FIXED_ITEMS = {
         {"name": "French Fries",                "portion": 1.0},
     ],
     "family sharing combo": [
-        {"name": "Mixed Grills", "portion": 1.0},
+        {"name": "Mixed Grills", "portion": 1.0, "qty_label": "1KG"},
         {"name": "French Fries", "portion": 2.0},
     ],
     "vegan combo": [
@@ -155,7 +155,10 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
 
     # 1. Fixed items always in this combo (not selectable by customer on Toters)
     for fixed in COMBO_FIXED_ITEMS.get(combo_name_lower, []):
-        per_bag.append(_make_combo_item(fixed['name'], fixed['portion']))
+        item = _make_combo_item(fixed['name'], fixed['portion'])
+        if 'qty_label' in fixed:
+            item['qty'] = fixed['qty_label']
+        per_bag.append(item)
 
     # 2. Customer-chosen items (Choose X > Y lines)
     for j in range(start_i, len(lines)):
