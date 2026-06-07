@@ -83,7 +83,7 @@ COMBO_FIXED_ITEMS = {
         {"name": "French Fries",                "portion": 1.0},
     ],
     "family sharing combo": [
-        {"name": "Mixed Grills", "portion": 1.0},
+        {"name": "Mixed Grills", "portion": 1.0, "qty_label": "1KG"},
         {"name": "French Fries", "portion": 2.0},
     ],
     "vegan combo": [
@@ -155,16 +155,23 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
 
     # 1. Fixed items always in this combo (not selectable by customer on Toters)
     for fixed in COMBO_FIXED_ITEMS.get(combo_name_lower, []):
-        per_bag.append(_make_combo_item(fixed['name'], fixed['portion']))
+        item = _make_combo_item(fixed['name'], fixed['portion'])
+        if 'qty_label' in fixed:
+            item['qty'] = fixed['qty_label']
+        per_bag.append(item)
 
     # 2. Customer-chosen items (Choose X > Y lines)
     for j in range(start_i, len(lines)):
         if lines[j] == 'Qty':
             break
-        m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
+        m = re.search(r'Choose\s+([\w\s]+?)\s*[>:]\s*(.+)', lines[j])
         if not m:
             continue
-        this_type = m.group(1).strip().lower()
+        raw_type = m.group(1).strip().lower()
+        # Handle "Two Salads" → "salad", "Two Mezza" → "mezza", "Two Kebbeh" → "kebbeh"
+        this_type = raw_type.split()[-1]
+        if combo_def.get(this_type) is None and this_type.endswith('s'):
+            this_type = this_type[:-1]
         item_name = m.group(2).strip()
 
         portion = combo_def.get(this_type, None)
