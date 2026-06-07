@@ -161,10 +161,14 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
     for j in range(start_i, len(lines)):
         if lines[j] == 'Qty':
             break
-        m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
+        m = re.search(r'Choose\s+([\w\s]+?)\s*[>:]\s*(.+)', lines[j])
         if not m:
             continue
-        this_type = m.group(1).strip().lower()
+        raw_type = m.group(1).strip().lower()
+        # Handle "Two Salads" → "salad", "Two Mezza" → "mezza", "Two Kebbeh" → "kebbeh"
+        this_type = raw_type.split()[-1]
+        if combo_def.get(this_type) is None and this_type.endswith('s'):
+            this_type = this_type[:-1]
         item_name = m.group(2).strip()
 
         portion = combo_def.get(this_type, None)
