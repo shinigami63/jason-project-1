@@ -18,6 +18,7 @@ def get_data_path(filename):
 
 DICTIONARY_PATH = get_data_path('dictionary.json')
 PREFERENCES_PATH = get_data_path('preferences.json')
+COMBOS_PATH = get_data_path('combos.json')
 _using_custom_dict = False
 
 def get_ui_path():
@@ -167,6 +168,123 @@ DEFAULT_DICTIONARY = {
     "sunday": "الأحد",
 }
 
+# ── Default combo definitions ─────────────────────────────────────────────────
+DEFAULT_COMBOS = {
+    "kebbeh zghertawiyeh combo": {
+        "has_biscuits_raha": True,
+        "fixed_items": [],
+        "choice_items": [
+            {"type": "kebbeh", "portion": 1.0},
+            {"type": "salad",  "portion": 0.5},
+            {"type": "mezza",  "portion": 0.5},
+            {"type": "drink",  "portion": 1.0},
+            {"type": "water",  "portion": 1.0},
+        ],
+    },
+    "taouk combo": {
+        "has_biscuits_raha": True,
+        "fixed_items": [
+            {"name": "Taouk",        "portion": 1.0},
+            {"name": "French Fries", "portion": 0.5},
+        ],
+        "choice_items": [
+            {"type": "salad",  "portion": 0.5},
+            {"type": "mezza",  "portion": 0.5},
+            {"type": "drink",  "portion": 1.0},
+            {"type": "water",  "portion": 1.0},
+        ],
+    },
+    "meat combo": {
+        "has_biscuits_raha": True,
+        "fixed_items": [
+            {"name": "Grilled Meat", "portion": 1.0},
+            {"name": "French Fries", "portion": 0.5},
+        ],
+        "choice_items": [
+            {"type": "salad",  "portion": 0.5},
+            {"type": "mezza",  "portion": 0.5},
+            {"type": "drink",  "portion": 1.0},
+            {"type": "water",  "portion": 1.0},
+        ],
+    },
+    "kafta combo": {
+        "has_biscuits_raha": True,
+        "fixed_items": [
+            {"name": "Grilled Kafta", "portion": 1.0},
+            {"name": "French Fries",  "portion": 0.5},
+        ],
+        "choice_items": [
+            {"type": "salad",  "portion": 0.5},
+            {"type": "mezza",  "portion": 0.5},
+            {"type": "drink",  "portion": 1.0},
+            {"type": "water",  "portion": 1.0},
+        ],
+    },
+    "mixed grill combo": {
+        "has_biscuits_raha": True,
+        "fixed_items": [
+            {"name": "Mixed Grills", "portion": 1.0},
+            {"name": "French Fries", "portion": 0.5},
+        ],
+        "choice_items": [
+            {"type": "salad",  "portion": 0.5},
+            {"type": "mezza",  "portion": 0.5},
+            {"type": "drink",  "portion": 1.0},
+            {"type": "water",  "portion": 1.0},
+        ],
+    },
+    "kebbe lovers box": {
+        "has_biscuits_raha": False,
+        "fixed_items": [
+            {"name": "Kebbeh Zghertawiye (Fat)",    "portion": 1.0},
+            {"name": "Kebbeh Zghertawiye (Meat)",   "portion": 1.0},
+            {"name": "Kebbeh Zghertawiye (Labneh)", "portion": 1.0},
+            {"name": "French Fries",                "portion": 1.0},
+        ],
+        "choice_items": [
+            {"type": "salad",  "portion": 1.0},
+            {"type": "mezza",  "portion": 1.0},
+        ],
+    },
+    "family sharing combo": {
+        "has_biscuits_raha": False,
+        "fixed_items": [
+            {"name": "Mixed Grills", "portion": 1.0, "qty_label": "1KG"},
+            {"name": "French Fries", "portion": 2.0},
+        ],
+        "choice_items": [
+            {"type": "salad",   "portion": 2.0},
+            {"type": "mezza",   "portion": 2.0},
+            {"type": "kebbeh",  "portion": 2.0},
+        ],
+    },
+    "vegan combo": {
+        "has_biscuits_raha": True,
+        "fixed_items": [
+            {"name": "Pumpkin Kebbeh (4 pcs)", "portion": 1.0},
+            {"name": "French Fries",           "portion": 0.5},
+        ],
+        "choice_items": [
+            {"type": "salad",  "portion": 0.5},
+            {"type": "mezza",  "portion": 0.5},
+            {"type": "drink",  "portion": 1.0},
+            {"type": "water",  "portion": 1.0},
+        ],
+    },
+    "kebbe tray combo": {
+        "has_biscuits_raha": True,
+        "fixed_items": [
+            {"name": "Cucumber With Laban", "portion": 0.5},
+        ],
+        "choice_items": [
+            {"type": "kebbeh", "portion": 1.0},
+            {"type": "mezza",  "portion": 0.5},
+            {"type": "drink",  "portion": 1.0},
+            {"type": "water",  "portion": 1.0},
+        ],
+    },
+}
+
 # ── Dictionary persistence ────────────────────────────────────────────────────
 def load_dictionary():
     saved = {}
@@ -212,6 +330,50 @@ def _write_preferences(d):
     with open(PREFERENCES_PATH, 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
 
+# ── Combo persistence ────────────────────────────────────────────────────────
+def load_combos():
+    saved = {}
+    if os.path.exists(COMBOS_PATH):
+        try:
+            with open(COMBOS_PATH, 'r', encoding='utf-8') as f:
+                saved = json.load(f)
+        except Exception:
+            pass
+    if not saved:
+        return {k: dict(v) for k, v in DEFAULT_COMBOS.items()}
+    return saved
+
+def _write_combos(d):
+    with open(COMBOS_PATH, 'w', encoding='utf-8') as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+
+def _apply_combos(data):
+    import extract
+    combos = {}
+    fixed = {}
+    biscuits = set()
+    for combo_name, cfg in data.items():
+        choice_map = {}
+        for ci in cfg.get('choice_items', []):
+            if ci.get('type'):
+                choice_map[ci['type']] = float(ci['portion'])
+        combos[combo_name] = choice_map
+        fi = []
+        for item in cfg.get('fixed_items', []):
+            if not item.get('name'):
+                continue
+            entry = {'name': item['name'], 'portion': float(item['portion'])}
+            if item.get('qty_label'):
+                entry['qty_label'] = item['qty_label']
+            fi.append(entry)
+        if fi:
+            fixed[combo_name] = fi
+        if cfg.get('has_biscuits_raha'):
+            biscuits.add(combo_name)
+    extract.COMBOS = combos
+    extract.COMBO_FIXED_ITEMS = fixed
+    extract.COMBOS_WITH_BISCUITS_RAHA = biscuits
+
 # ── Settings persistence ──────────────────────────────────────────────────────
 def load_settings():
     path = get_data_path('settings.json')
@@ -238,6 +400,8 @@ if 'custom_dict_path' in SETTINGS:
 
 DICTIONARY = load_dictionary()
 PREFERENCES = load_preferences()
+COMBOS_DATA = load_combos()
+_apply_combos(COMBOS_DATA)
 PENDING_ORDER = None
 
 # ── Translation ───────────────────────────────────────────────────────────────
@@ -353,6 +517,21 @@ def save_sett():
     try:
         SETTINGS = request.json
         _write_settings(SETTINGS)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/combos', methods=['GET'])
+def get_combos():
+    return jsonify(COMBOS_DATA)
+
+@app.route('/combos/save', methods=['POST'])
+def save_combos():
+    global COMBOS_DATA
+    try:
+        COMBOS_DATA = request.json
+        _write_combos(COMBOS_DATA)
+        _apply_combos(COMBOS_DATA)
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})

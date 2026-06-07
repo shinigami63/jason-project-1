@@ -101,6 +101,36 @@
   .btn-dict-add { background: #111; color: #fff; border: none; border-radius: 7px; padding: 12px 16px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-dict-add:hover { background: #333; }
 
+  /* Combos editor */
+  .combo-card { border: 1.5px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .combo-card-hd { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #fafafa; cursor: pointer; user-select: none; }
+  .combo-card-hd:hover { background: #f0f0f0; }
+  .combo-card-title { flex: 1; font-size: 14px; font-weight: 700; border: 1.5px solid transparent; border-radius: 5px; padding: 5px 7px; background: transparent; cursor: text; min-width: 0; }
+  .combo-card-title:focus { outline: none; border-color: var(--red); background: #fff8f8; cursor: text; }
+  .combo-biscuits-toggle { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .combo-del-btn { background: none; border: none; color: #ddd; font-size: 16px; cursor: pointer; padding: 4px 6px; line-height: 1; flex-shrink: 0; }
+  .combo-del-btn:hover { color: var(--red); }
+  .combo-chevron { font-size: 11px; color: var(--muted); flex-shrink: 0; transition: transform .15s; }
+  .combo-card.open .combo-chevron { transform: rotate(90deg); }
+  .combo-card-body { padding: 14px; border-top: 1px solid var(--border); display: none; }
+  .combo-card.open .combo-card-body { display: block; }
+  .combo-subsection { margin-bottom: 14px; }
+  .combo-sub-hd { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
+  .combo-sub-hd small { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11px; }
+  .combo-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 6px; table-layout: fixed; }
+  .combo-table th { text-align: left; font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 4px 4px; border-bottom: 1.5px solid var(--border); }
+  .combo-table td { padding: 2px 2px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+  .combo-input { width: 100%; padding: 7px 7px; border: 1.5px solid transparent; border-radius: 5px; font-size: 13px; background: transparent; }
+  .combo-input:focus { outline: none; border-color: var(--red); background: #fff8f8; }
+  .combo-input.ar { direction: rtl; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+  .combo-input.num { text-align: center; }
+  .combo-row-del { background: none; border: none; color: #ddd; font-size: 15px; cursor: pointer; padding: 5px; }
+  .combo-row-del:hover { color: var(--red); }
+  .combo-add-row-btn { background: none; border: 1.5px dashed var(--border); color: var(--muted); border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; width: 100%; margin-top: 2px; }
+  .combo-add-row-btn:hover { border-color: var(--red); color: var(--red); }
+  .combo-new-btn { background: #111; color: #fff; border: none; border-radius: 7px; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 4px; }
+  .combo-new-btn:hover { background: #333; }
+
   .sp-footer { display: flex; align-items: center; gap: 10px; padding-top: 16px; border-top: 1.5px solid var(--border); }
   .btn-save-settings { background: var(--red); color: #fff; border: none; border-radius: 7px; padding: 14px 24px; font-size: 15px; font-weight: 700; cursor: pointer; flex: 1; }
   .btn-save-settings:hover { opacity: .88; }
@@ -229,6 +259,12 @@
       </div>
     </div>
 
+    <div class="sp-section">
+      <h3>Combos</h3>
+      <div id="combosContainer"></div>
+      <button class="combo-new-btn" onclick="addNewCombo()">+ New Combo</button>
+    </div>
+
     <div class="sp-footer">
       <button class="btn-save-settings" onclick="saveSettings()">Save Changes</button>
       <span class="sp-save-status" id="spStatus"></span>
@@ -242,6 +278,7 @@ let itemCount = 0;
 let dictData = {};
 let prefsData = {};
 let settingsData = {};
+let combosData = {};
 let dictFilter = '';
 let prefsFilter = '';
 
@@ -457,18 +494,21 @@ function autoLearnCorrections() {
 // ── Settings panel ────────────────────────────────────────────────────────────
 async function openSettings() {
   try {
-    const [dr, sr, pr] = await Promise.all([fetch('/dictionary'), fetch('/settings'), fetch('/preferences')]);
+    const [dr, sr, pr, cr] = await Promise.all([fetch('/dictionary'), fetch('/settings'), fetch('/preferences'), fetch('/combos')]);
     dictData     = await dr.json();
     settingsData = await sr.json();
     prefsData    = (await pr.json()) || {};
+    combosData   = await cr.json();
   } catch(e) {
     dictData     = {};
     settingsData = { branch: 'الأشرفية' };
     prefsData    = {};
+    combosData   = {};
   }
   renderBranch();
   renderDict();
   renderPrefs();
+  renderCombos([]);
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
@@ -710,17 +750,190 @@ function setJsonFileUI(path) {
   }
 }
 
+// ── Combos editor ─────────────────────────────────────────────────────────────
+function getOpenCards() {
+  return [...document.querySelectorAll('#combosContainer .combo-card.open')].map(c => c.dataset.combo);
+}
+
+function renderCombos(keepOpen) {
+  if (keepOpen === undefined) keepOpen = getOpenCards();
+  const container = document.getElementById('combosContainer');
+  container.innerHTML = '';
+  Object.entries(combosData).forEach(([name, cfg]) => {
+    const card = buildComboCard(name, cfg);
+    if (keepOpen.includes(name)) card.classList.add('open');
+    container.appendChild(card);
+  });
+}
+
+function buildComboCard(name, cfg) {
+  const card = document.createElement('div');
+  card.className = 'combo-card';
+  card.dataset.combo = name;
+
+  const hd = document.createElement('div');
+  hd.className = 'combo-card-hd';
+  hd.innerHTML = `
+    <input class="combo-card-title" value="${escHtml(name)}" title="Click to rename">
+    <label class="combo-biscuits-toggle"><input type="checkbox" class="combo-biscuits-chk" ${cfg.has_biscuits_raha ? 'checked' : ''}> Biscuits &amp; Raha</label>
+    <button class="combo-del-btn" title="Delete combo">✕</button>
+    <span class="combo-chevron">▶</span>
+  `;
+  hd.querySelector('.combo-card-title').addEventListener('click', e => e.stopPropagation());
+  hd.querySelector('.combo-card-title').addEventListener('blur', e => {
+    const newName = e.target.value.trim().toLowerCase();
+    if (!newName || newName === name) return;
+    const open = getOpenCards().map(n => n === name ? newName : n);
+    const cfg2 = combosData[name];
+    delete combosData[name];
+    combosData[newName] = cfg2;
+    renderCombos(open);
+  });
+  hd.querySelector('.combo-biscuits-chk').addEventListener('click', e => e.stopPropagation());
+  hd.querySelector('.combo-biscuits-chk').addEventListener('change', e => {
+    combosData[card.dataset.combo].has_biscuits_raha = e.target.checked;
+  });
+  hd.querySelector('.combo-del-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!confirm(`Delete combo "${card.dataset.combo}"?`)) return;
+    delete combosData[card.dataset.combo];
+    renderCombos();
+  });
+  hd.addEventListener('click', () => card.classList.toggle('open'));
+  card.appendChild(hd);
+
+  const body = document.createElement('div');
+  body.className = 'combo-card-body';
+  body.innerHTML = `
+    <div class="combo-subsection">
+      <div class="combo-sub-hd">Fixed Items <small>— always in the bag, not selectable on Toters</small></div>
+      <table class="combo-table">
+        <colgroup><col style="width:28%"><col style="width:28%"><col style="width:13%"><col style="width:18%"><col style="width:13%"></colgroup>
+        <thead><tr><th>Name (English)</th><th>Arabic (Receipt)</th><th>Qty</th><th>Label override</th><th></th></tr></thead>
+        <tbody class="combo-fixed-body"></tbody>
+      </table>
+      <button class="combo-add-row-btn combo-add-fixed">+ Fixed Item</button>
+    </div>
+    <div class="combo-subsection">
+      <div class="combo-sub-hd">Choice Items <small>— customer picks on Toters ("Choose Two Salads &gt; ...")</small></div>
+      <table class="combo-table">
+        <colgroup><col style="width:60%"><col style="width:27%"><col style="width:13%"></colgroup>
+        <thead><tr><th>Type keyword</th><th>Portions</th><th></th></tr></thead>
+        <tbody class="combo-choice-body"></tbody>
+      </table>
+      <button class="combo-add-row-btn combo-add-choice">+ Choice Item</button>
+    </div>
+  `;
+
+  const fixedTbody = body.querySelector('.combo-fixed-body');
+  (cfg.fixed_items || []).forEach((item, idx) => fixedTbody.appendChild(buildFixedRow(name, item, idx)));
+
+  const choiceTbody = body.querySelector('.combo-choice-body');
+  (cfg.choice_items || []).forEach((item, idx) => choiceTbody.appendChild(buildChoiceRow(name, item, idx)));
+
+  body.querySelector('.combo-add-fixed').addEventListener('click', () => {
+    combosData[card.dataset.combo].fixed_items.push({name: '', portion: 1.0, qty_label: ''});
+    const open = getOpenCards();
+    renderCombos(open);
+    const rebuilt = document.querySelector(`.combo-card[data-combo="${CSS.escape(card.dataset.combo)}"]`);
+    if (rebuilt && !rebuilt.classList.contains('open')) rebuilt.classList.add('open');
+    const inputs = rebuilt?.querySelectorAll('.combo-fixed-body tr:last-child input');
+    if (inputs?.length) inputs[0].focus();
+  });
+  body.querySelector('.combo-add-choice').addEventListener('click', () => {
+    combosData[card.dataset.combo].choice_items.push({type: '', portion: 1.0});
+    const open = getOpenCards();
+    renderCombos(open);
+    const rebuilt = document.querySelector(`.combo-card[data-combo="${CSS.escape(card.dataset.combo)}"]`);
+    if (rebuilt && !rebuilt.classList.contains('open')) rebuilt.classList.add('open');
+    const inputs = rebuilt?.querySelectorAll('.combo-choice-body tr:last-child input');
+    if (inputs?.length) inputs[0].focus();
+  });
+
+  card.appendChild(body);
+  return card;
+}
+
+function buildFixedRow(comboName, item, idx) {
+  const tr = document.createElement('tr');
+  const arVal = dictData[(item.name || '').toLowerCase()] || '';
+  tr.innerHTML = `
+    <td><input class="combo-input" value="${escHtml(item.name || '')}" placeholder="e.g. French Fries"></td>
+    <td><input class="combo-input ar" value="${escHtml(arVal)}" placeholder="عربي"></td>
+    <td><input class="combo-input num" type="number" value="${item.portion || 1}" min="0.25" step="0.25" style="width:100%"></td>
+    <td><input class="combo-input" value="${escHtml(item.qty_label || '')}" placeholder="e.g. 1KG"></td>
+    <td><button class="combo-row-del" title="Remove">✕</button></td>
+  `;
+  const [nameIn, arIn, portIn, labelIn, delBtn] = tr.querySelectorAll('input, button');
+
+  const sync = () => {
+    const items = combosData[comboName]?.fixed_items;
+    if (!items?.[idx]) return;
+    items[idx].name      = nameIn.value.trim();
+    items[idx].portion   = parseFloat(portIn.value) || 1.0;
+    items[idx].qty_label = labelIn.value.trim();
+    const en = items[idx].name.toLowerCase();
+    const ar = arIn.value.trim();
+    if (en && ar) dictData[en] = ar;
+  };
+  nameIn.addEventListener('blur', sync);
+  arIn.addEventListener('blur', sync);
+  portIn.addEventListener('change', sync);
+  labelIn.addEventListener('blur', sync);
+  delBtn.addEventListener('click', () => {
+    combosData[comboName]?.fixed_items.splice(idx, 1);
+    renderCombos();
+  });
+  return tr;
+}
+
+function buildChoiceRow(comboName, item, idx) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input class="combo-input" value="${escHtml(item.type || '')}" placeholder="salad / mezza / kebbeh / drink / water"></td>
+    <td><input class="combo-input num" type="number" value="${item.portion || 1}" min="0.25" step="0.25" style="width:100%"></td>
+    <td><button class="combo-row-del" title="Remove">✕</button></td>
+  `;
+  const [typeIn, portIn, delBtn] = tr.querySelectorAll('input, button');
+
+  const sync = () => {
+    const items = combosData[comboName]?.choice_items;
+    if (!items?.[idx]) return;
+    items[idx].type    = typeIn.value.trim().toLowerCase();
+    items[idx].portion = parseFloat(portIn.value) || 1.0;
+  };
+  typeIn.addEventListener('blur', sync);
+  portIn.addEventListener('change', sync);
+  delBtn.addEventListener('click', () => {
+    combosData[comboName]?.choice_items.splice(idx, 1);
+    renderCombos();
+  });
+  return tr;
+}
+
+function addNewCombo() {
+  const name = prompt('New combo name (will be matched against Toters order text):');
+  if (!name?.trim()) return;
+  const key = name.trim().toLowerCase();
+  if (combosData[key]) { alert('A combo with that name already exists.'); return; }
+  combosData[key] = { has_biscuits_raha: false, fixed_items: [], choice_items: [] };
+  const open = getOpenCards();
+  open.push(key);
+  renderCombos(open);
+}
+
 async function saveSettings() {
   const statusEl = document.getElementById('spStatus');
   statusEl.textContent = 'Saving...';
   try {
-    const [dr, sr, pr] = await Promise.all([
+    const [dr, sr, pr, cr] = await Promise.all([
       fetch('/dictionary/save',  { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dictData) }),
       fetch('/settings/save',    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsData) }),
-      fetch('/preferences/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prefsData) })
+      fetch('/preferences/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prefsData) }),
+      fetch('/combos/save',      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(combosData) })
     ]);
-    const [dd, sd, pd] = await Promise.all([dr.json(), sr.json(), pr.json()]);
-    if (dd.ok && sd.ok && pd.ok) {
+    const [dd, sd, pd, cd] = await Promise.all([dr.json(), sr.json(), pr.json(), cr.json()]);
+    if (dd.ok && sd.ok && pd.ok && cd.ok) {
       statusEl.textContent = '✅ Saved!';
       setTimeout(() => { statusEl.textContent = ''; closeSettings(); }, 800);
     } else {
