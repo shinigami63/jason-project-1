@@ -278,9 +278,19 @@ def _items(lines):
             pref_type = None
             pref = None
             add_ons_list = []
+            comments_list = []
             for j in range(i, len(lines)):
                 if lines[j] == 'Qty':
                     break
+                # Customer comment: shown as "message<comment>" (the Toters
+                # message icon ligature followed by the raw note). Keep it
+                # verbatim — no translation — as its own line.
+                cm = re.match(r'^message(.+)$', lines[j])
+                if cm:
+                    comment_text = cm.group(1).strip()
+                    if comment_text:
+                        comments_list.append(comment_text)
+                    continue
                 m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
                 if not m:
                     continue
@@ -327,7 +337,8 @@ def _items(lines):
                 'original_add_ons': list(add_ons_list),
                 'category':         category,
                 'is_raw':           is_raw,
-                'arabic_name':      name
+                'arabic_name':      name,
+                'comments':         comments_list
             })
         else:
             i += 1
