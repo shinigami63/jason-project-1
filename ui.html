@@ -348,14 +348,26 @@ function addItemRow(item = null) {
   const en       = item?.name ?? '';
   const addOns   = item?.add_ons ?? [];
   const origAOs  = item?.original_add_ons ?? [];
+  const comments = item?.comments ?? [];
 
-  const notesHtml = addOns.map((ao, j) => `
+  const addOnsHtml = addOns.map((ao, j) => `
     <div class="note-row">
       <input type="text" class="note-input" placeholder="Kitchen note"
              data-original="${escHtml(origAOs[j] ?? '')}"
              value="${escHtml(ao)}">
       <button class="note-del" onclick="this.closest('.note-row').remove()">✕</button>
     </div>`).join('');
+
+  // Customer comments are kept verbatim (no data-original → never auto-learned
+  // or translated). They render as their own note rows alongside add-ons.
+  const commentsHtml = comments.map(c => `
+    <div class="note-row">
+      <input type="text" class="note-input" placeholder="Kitchen note"
+             value="${escHtml(c)}">
+      <button class="note-del" onclick="this.closest('.note-row').remove()">✕</button>
+    </div>`).join('');
+
+  const notesHtml = addOnsHtml + commentsHtml;
 
 
   const div = document.createElement('div');
