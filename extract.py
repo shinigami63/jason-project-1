@@ -279,6 +279,7 @@ def _items(lines):
             pref = None
             add_ons_list = []
             comments_list = []
+            has_yogurt_side = False
             for j in range(i, len(lines)):
                 if lines[j] == 'Qty':
                     break
@@ -291,7 +292,7 @@ def _items(lines):
                     if comment_text:
                         comments_list.append(comment_text)
                     continue
-                m = re.search(r'Choose\s+(\w+)\s*[>:]\s*(.+)', lines[j])
+                m = re.search(r'(?:Choose|Add)\s+(\w+)\s*[>:]\s*(.+)', lines[j])
                 if not m:
                     continue
                 this_type = m.group(1).strip().lower()
@@ -301,6 +302,10 @@ def _items(lines):
                     pref = this_val
                 elif this_type in QUANTITY_TYPES and this_val.strip().isdigit():
                     qty = this_val
+                elif this_type == 'ingredients' and 'yogurt' in this_val.lower():
+                    # "Add Ingredients > Yogurt On The Side" is broken out into
+                    # its own لبن line rather than kept as a kitchen note.
+                    has_yogurt_side = True
                 else:
                     add_ons_list.append(this_val)
 
@@ -340,6 +345,19 @@ def _items(lines):
                 'arabic_name':      name,
                 'comments':         comments_list
             })
+
+            if has_yogurt_side:
+                items.append({
+                    'qty':              qty,
+                    'name':             'Yogurt',
+                    'variant':          None,
+                    'add_ons':          [],
+                    'original_add_ons': [],
+                    'category':         category,
+                    'is_raw':           False,
+                    'arabic_name':      'لبن',
+                    'comments':         []
+                })
         else:
             i += 1
 
