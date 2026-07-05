@@ -321,7 +321,23 @@ def _items(lines):
             # Calculate display qty
             display_qty = qty
             if is_portion and pref and not pref.lower().startswith('platter'):
-                display_qty = pref
+                # A weight portion (e.g. "1KG") only replaces the qty outright
+                # when a single one was ordered. With Qty > 1 (e.g. two 1KG
+                # portions), multiply through to the total weight instead of
+                # discarding the order count — same convention already used
+                # for weight variants below.
+                wm = WEIGHT_PATTERN.match(pref)
+                if wm and qty and qty.isdigit() and int(qty) > 1:
+                    grams = int(wm.group(1)) * int(qty)
+                    if wm.group(2).lower() == 'kg':
+                        grams = grams * 1000
+                    if grams >= 1000:
+                        kg = grams / 1000
+                        display_qty = f'{kg:g}KG'
+                    else:
+                        display_qty = f'{grams}G'
+                else:
+                    display_qty = pref
             elif not is_portion and variant:
                 wm = WEIGHT_PATTERN.match(variant)
                 if wm:
