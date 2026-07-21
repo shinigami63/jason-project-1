@@ -101,7 +101,7 @@ CHOICE_TYPE_CATEGORIES = {
     "kebbeh": "Kebbeh",
     "salad":  "Salads",
     "mezza":  "Mezza",
-    "drink":  "Drinks",
+    "drink":  "Beverages",
     "water":  "Water",
 }
 
@@ -203,7 +203,7 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'variant':          None,
             'add_ons':          [],
             'original_add_ons': [],
-            'category':         'Other',
+            'category':         'Desserts Zamen',
             'is_raw':           False,
             'arabic_name':      'بسكوت وراحة قطعتين مطبقين',
         })
@@ -303,7 +303,7 @@ def _items(lines):
                     if comment_text:
                         comments_list.append(comment_text)
                     continue
-                m = re.search(r'(?:Choose|Add)\s+(\w+)\s*[>:]\s*(.+)', lines[j])
+                m = re.search(r'(?:Choose|Add)\s+([\w\s]+?)\s*[>:]\s*(.+)', lines[j])
                 if not m:
                     continue
                 this_type = m.group(1).strip().lower()
@@ -317,6 +317,12 @@ def _items(lines):
                     # "Add Ingredients > Yogurt On The Side" is broken out into
                     # its own لبن line rather than kept as a kitchen note.
                     has_yogurt_side = True
+                elif this_val and this_type.rstrip('s') == name.lower().rstrip('s'):
+                    # Generic placeholder products (e.g. "Soft Drinks", "Water")
+                    # present their real selection as "Choose Soft Drink >
+                    # Diet 7Up" — use that as the actual item name instead of
+                    # printing the generic category label.
+                    name = this_val
                 else:
                     add_ons_list.append(this_val)
 
