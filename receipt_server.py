@@ -443,16 +443,52 @@ def init_history_db():
 
 init_history_db()
 
+_MONTH_ABBR = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+               'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
+_WEEKDAY_ABBR = {'mon': 0, 'tue': 1, 'wed': 2, 'thu': 3, 'fri': 4, 'sat': 5, 'sun': 6}
+
 def parse_prepare_by_dt(prepare_by):
-    try:
-        dt = datetime.strptime(prepare_by, '%b %d, %I:%M %p').replace(year=datetime.now().year)
-        # Orders printed near year-end for early-January delivery dates would
-        # otherwise land a year in the future; pull them back a year instead.
-        if dt - datetime.now() > timedelta(days=180):
-            dt = dt.replace(year=dt.year - 1)
-        return dt
-    except (ValueError, TypeError):
+    s = (prepare_by or '').strip()
+    m = re.match(r'^(\w+)\s+(\d{1,2}),\s*(\d{1,2}):(\d{2})\s*(AM|PM)$', s, re.IGNORECASE)
+    if not m:
         return None
+    token, day_s, hour_s, minute_s, ampm = m.groups()
+    day = int(day_s)
+    hour = int(hour_s) % 12
+    if ampm.upper() == 'PM':
+        hour += 12
+    minute = int(minute_s)
+    token_key = token.lower()[:3]
+    now = datetime.now()
+
+    if token_key in _MONTH_ABBR:
+        try:
+            dt = datetime(now.year, _MONTH_ABBR[token_key], day, hour, minute)
+        except ValueError:
+            return None
+        # Orders printed near year-end for early-January delivery dates would
+        # otherwise land a year in the future (or vice-versa); shift a year.
+        if dt - now > timedelta(days=180):
+            dt = dt.replace(year=dt.year - 1)
+        elif now - dt > timedelta(days=180):
+            dt = dt.replace(year=dt.year + 1)
+        return dt
+
+    if token_key in _WEEKDAY_ABBR:
+        # Toters actually sends a weekday abbreviation here, not a month
+        # (e.g. "Mon 20, 03:55 PM") — no month is given at all, so find the
+        # nearby calendar date whose day-of-month and weekday both match.
+        target_weekday = _WEEKDAY_ABBR[token_key]
+        best = None
+        for offset in range(-20, 40):
+            candidate = (now + timedelta(days=offset)).date()
+            if candidate.day == day and candidate.weekday() == target_weekday:
+                candidate_dt = datetime(candidate.year, candidate.month, candidate.day, hour, minute)
+                if best is None or abs((candidate_dt - now).total_seconds()) < abs((best - now).total_seconds()):
+                    best = candidate_dt
+        return best
+
+    return None
 
 def save_order_to_history(d):
     order_num = str(d.get('order_num') or '').strip()
