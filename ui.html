@@ -3,21 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kebbet Zamen — Receipt</title>
+<title>Kebbet Zamen</title>
 <style>
   :root { --red: #c62828; --bg: #f5f5f5; --card: #fff; --border: #e0e0e0; --text: #111; --muted: #888; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); min-height: 100vh; padding: 16px 12px; color: var(--text); }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); min-height: 100vh; color: var(--text); }
   * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   input, textarea, button, [contenteditable] { touch-action: manipulation; }
-  .wrap { max-width: 680px; margin: 0 auto; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 16px 12px 40px; }
 
-  header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 20px; }
-  header h1 { font-size: 22px; font-weight: 800; flex: 1; }
-  header h1 span { color: var(--red); }
-  header p { font-size: 13px; color: var(--muted); }
-  .settings-btn { background: none; border: 1.5px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 16px; cursor: pointer; color: var(--muted); transition: all .15s; flex-shrink: 0; }
-  .settings-btn:hover { border-color: #999; color: var(--text); }
+  /* ── Top nav ─────────────────────────────────────────────────────────────── */
+  .topnav { background: #111; display: flex; align-items: center; gap: 4px; padding: 10px 12px; overflow-x: auto; position: sticky; top: 0; z-index: 50; }
+  .topnav .brand { color: #fff; font-weight: 800; font-size: 16px; margin-right: 10px; white-space: nowrap; flex-shrink: 0; }
+  .topnav .brand span { color: #ff6659; }
+  .nav-btn { background: none; border: none; color: #aaa; font-size: 13.5px; font-weight: 600; padding: 8px 12px; border-radius: 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+  .nav-btn:hover { color: #fff; background: rgba(255,255,255,.08); }
+  .nav-btn.active { color: #fff; background: var(--red); }
+
+  .page { display: none; }
+  .page.active { display: block; }
 
   .paste-card { background: var(--card); border: 2px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
   .paste-card label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 8px; }
@@ -64,25 +68,64 @@
   .btn-add-note { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; padding: 8px 0; text-align: left; min-height: 36px; }
   .btn-add-note:hover { color: var(--red); }
 
-  /* ── Settings overlay ──────────────────────────────────────────────────── */
-  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; overflow-y: auto; }
-  .overlay.open { display: flex; align-items: flex-start; justify-content: center; padding: 20px 16px; }
-  .settings-panel { background: #fff; border-radius: 12px; width: 100%; max-width: 680px; padding: 20px; }
-  .sp-header { display: flex; align-items: center; margin-bottom: 20px; }
-  .sp-header h2 { font-size: 18px; font-weight: 800; flex: 1; }
-  .sp-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--muted); line-height: 1; }
-  .sp-close:hover { color: var(--text); }
+  /* ── Toolbar (History / Reports range picker) ──────────────────────────────── */
+  .toolbar-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .range-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .range-row label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+  .range-row input[type=date] { padding: 9px 8px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 14px; }
+  .preset-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .preset-btns button { background: #f0f0f0; border: none; border-radius: 6px; padding: 8px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: #333; }
+  .preset-btns button:hover { background: #e2e2e2; }
+  .btn-go { background: #111; color: #fff; border: none; border-radius: 6px; padding: 10px 18px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .btn-go:hover { background: #333; }
+  .range-total { margin-top: 10px; font-size: 13px; color: var(--muted); font-weight: 600; }
 
-  .sp-section { margin-bottom: 24px; }
+  /* ── History page ───────────────────────────────────────────────────────── */
+  .hist-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+  .hist-hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; flex-wrap: wrap; }
+  .hist-hd:hover { background: #fafafa; }
+  .hist-main { display: flex; align-items: baseline; gap: 8px; }
+  .hist-order { font-weight: 800; font-size: 14px; }
+  .hist-customer { font-size: 13.5px; color: #333; }
+  .hist-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .hist-count { background: #eee; border-radius: 10px; padding: 2px 8px; }
+  .hist-body { display: none; border-top: 1px solid var(--border); padding: 12px 14px; }
+  .hist-card.open .hist-body { display: block; }
+  .preview-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  .preview-table td { padding: 5px 4px; border-bottom: 1px dotted #eee; font-size: 13px; vertical-align: top; }
+  .preview-table .pq { font-weight: 800; width: 46px; }
+  .preview-note { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .preview-bag td { background: #222; color: #fff; font-weight: 700; padding: 6px 8px; }
+  .btn-reprint { background: var(--red); color: #fff; border: none; border-radius: 7px; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .btn-reprint:hover { opacity: .88; }
+  .empty-note { color: var(--muted); font-size: 13px; padding: 14px 4px; }
+
+  /* ── Reports page ───────────────────────────────────────────────────────── */
+  .report-tabs { display: flex; gap: 6px; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .report-tab { background: #f0f0f0; border: none; border-radius: 6px; padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer; color: #333; }
+  .report-tab.active { background: #111; color: #fff; }
+  .report-panel { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .report-panel-hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .report-panel-hd span { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .btn-print-report { background: #111; color: #fff; border: none; border-radius: 7px; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .btn-print-report:hover { background: #333; }
+  .report-cat-hd { background: #111; color: #fff; font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px; padding: 6px 10px; border-radius: 5px; margin-top: 12px; margin-bottom: 4px; }
+  .report-day-hd { display: flex; justify-content: space-between; background: #fafafa; border-bottom: 2px solid #111; padding: 6px 10px; margin-top: 12px; font-weight: 700; font-size: 13px; }
+  .report-day-count { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .report-table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
+  .report-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); padding: 5px 10px; border-bottom: 1.5px solid var(--border); }
+  .report-table td { padding: 5px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .rq { text-align: right; font-weight: 700; }
+
+  /* ── Settings page ──────────────────────────────────────────────────────── */
+  .sp-section { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
   .sp-section h3 { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
 
-  /* Branch selector */
   .branch-options { display: flex; gap: 8px; }
   .branch-opt { flex: 1; padding: 14px 8px; border: 2px solid var(--border); border-radius: 8px; background: #fafafa; cursor: pointer; text-align: center; font-size: 15px; font-weight: 700; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; transition: all .15s; }
   .branch-opt:hover { border-color: #999; }
   .branch-opt.selected { border-color: var(--red); background: #fff8f8; color: var(--red); }
 
-  /* Dictionary */
   .dict-search { width: 100%; padding: 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 16px; margin-bottom: 10px; }
   .dict-search:focus { outline: none; border-color: var(--red); }
   .dict-table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -101,7 +144,6 @@
   .btn-dict-add { background: #111; color: #fff; border: none; border-radius: 7px; padding: 12px 16px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .btn-dict-add:hover { background: #333; }
 
-  /* Combos editor */
   .combo-card { border: 1.5px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
   .combo-card-hd { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #fafafa; cursor: pointer; user-select: none; }
   .combo-card-hd:hover { background: #f0f0f0; }
@@ -131,12 +173,11 @@
   .combo-new-btn { background: #111; color: #fff; border: none; border-radius: 7px; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 4px; }
   .combo-new-btn:hover { background: #333; }
 
-  .sp-footer { display: flex; align-items: center; gap: 10px; padding-top: 16px; border-top: 1.5px solid var(--border); }
+  .sp-footer { display: flex; align-items: center; gap: 10px; position: sticky; bottom: 0; background: var(--bg); padding: 10px 0 4px; }
   .btn-save-settings { background: var(--red); color: #fff; border: none; border-radius: 7px; padding: 14px 24px; font-size: 15px; font-weight: 700; cursor: pointer; flex: 1; }
   .btn-save-settings:hover { opacity: .88; }
   .sp-save-status { font-size: 13px; color: var(--muted); }
 
-  /* Custom JSON file section */
   .sp-note { font-size: 13px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
   .json-file-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .json-file-input { flex: 1; min-width: 140px; padding: 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 16px; font-family: monospace; }
@@ -154,49 +195,100 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
 
-  /* ── Mobile ──────────────────────────────────────────────────────────────── */
   @media (max-width: 600px) {
-    .overlay.open { padding: 0; align-items: stretch; }
-    .settings-panel { border-radius: 0; min-height: 100svh; }
-    .sp-header { position: sticky; top: 0; background: #fff; z-index: 1; padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
     .meta-label { min-width: 80px; }
     [contenteditable] { padding: 4px 4px; }
+    .topnav .brand { display: none; }
   }
 </style>
 </head>
 <body>
+<nav class="topnav">
+  <div class="brand">Kebbet <span>Zamen</span></div>
+  <button class="nav-btn active" data-page="neworder" onclick="showPage('neworder')">New Order</button>
+  <button class="nav-btn" data-page="history" onclick="showPage('history')">History</button>
+  <button class="nav-btn" data-page="reports" onclick="showPage('reports')">Reports</button>
+  <button class="nav-btn" data-page="settings" onclick="showPage('settings')">Settings</button>
+</nav>
+
 <div class="wrap">
-  <header>
-    <h1>Kebbet <span>Zamen</span></h1>
-    <p>Receipt Generator</p>
-    <button class="settings-btn" onclick="openSettings()" title="Settings">⚙️</button>
-  </header>
 
-  <div class="paste-card">
-    <label>Paste Toters order page</label>
-    <textarea id="rawText" placeholder="Copy the entire Toters order page and paste it here..."></textarea>
-    <br>
-    <button class="btn btn-parse" id="parseBtn" onclick="parseOrder()">Parse Order</button>
-    <div class="status" id="status"></div>
-  </div>
-
-  <div class="items-section" id="itemsSection">
-    <div class="edit-hint">✏️ Click any field to edit &nbsp;|&nbsp; ✕ to remove item</div>
-    <div class="meta-card" id="metaCard"></div>
-    <div id="itemsList"></div>
-    <button class="btn-add" onclick="addItem()">+ Add Item</button>
-    <button class="btn btn-print" id="printBtn" onclick="printReceipt()">🖨️ Print Receipt</button>
-  </div>
-</div>
-
-<!-- Settings overlay -->
-<div class="overlay" id="overlay" onclick="overlayClick(event)">
-  <div class="settings-panel">
-    <div class="sp-header">
-      <h2>⚙️ Settings</h2>
-      <button class="sp-close" onclick="closeSettings()">✕</button>
+  <!-- ── New Order page ─────────────────────────────────────────────────── -->
+  <section class="page active" id="page-neworder">
+    <div class="paste-card">
+      <label>Paste Toters order page</label>
+      <textarea id="rawText" placeholder="Copy the entire Toters order page and paste it here..."></textarea>
+      <br>
+      <button class="btn btn-parse" id="parseBtn" onclick="parseOrder()">Parse Order</button>
+      <div class="status" id="status"></div>
     </div>
 
+    <div class="items-section" id="itemsSection">
+      <div class="edit-hint">✏️ Click any field to edit &nbsp;|&nbsp; ✕ to remove item</div>
+      <div class="meta-card" id="metaCard"></div>
+      <div id="itemsList"></div>
+      <button class="btn-add" onclick="addItem()">+ Add Item</button>
+      <button class="btn btn-print" id="printBtn" onclick="printReceipt()">🖨️ Print Receipt</button>
+    </div>
+  </section>
+
+  <!-- ── History page ───────────────────────────────────────────────────── -->
+  <section class="page" id="page-history">
+    <div class="toolbar-card">
+      <div class="range-row">
+        <label>From <input type="date" id="histFrom"></label>
+        <label>To <input type="date" id="histTo"></label>
+        <div class="preset-btns">
+          <button onclick="setHistRange('today')">Today</button>
+          <button onclick="setHistRange('week')">This Week</button>
+          <button onclick="setHistRange('month')">This Month</button>
+          <button onclick="setHistRange('all')">All</button>
+        </div>
+        <button class="btn-go" onclick="loadHistory()">Go</button>
+      </div>
+      <div class="range-total" id="histTotal"></div>
+    </div>
+    <div id="historyList"></div>
+  </section>
+
+  <!-- ── Reports page ───────────────────────────────────────────────────── -->
+  <section class="page" id="page-reports">
+    <div class="toolbar-card">
+      <div class="range-row">
+        <label>From <input type="date" id="repFrom"></label>
+        <label>To <input type="date" id="repTo"></label>
+        <div class="preset-btns">
+          <button onclick="setRepRange('today')">Today</button>
+          <button onclick="setRepRange('week')">This Week</button>
+          <button onclick="setRepRange('month')">This Month</button>
+        </div>
+        <button class="btn-go" onclick="loadReports()">Go</button>
+      </div>
+      <div class="report-tabs">
+        <button class="report-tab active" data-tab="items" onclick="showReportTab('items')">Items Sold</button>
+        <button class="report-tab" data-tab="orders" onclick="showReportTab('orders')">Orders Dashboard</button>
+      </div>
+    </div>
+
+    <div class="report-panel" id="itemsReportPanel">
+      <div class="report-panel-hd">
+        <span id="itemsReportSummary"></span>
+        <button class="btn-print-report" onclick="printItemsReport()">🖨️ Print (A4)</button>
+      </div>
+      <div id="itemsReportBody"></div>
+    </div>
+
+    <div class="report-panel" id="ordersReportPanel" style="display:none">
+      <div class="report-panel-hd">
+        <span id="ordersReportSummary"></span>
+        <button class="btn-print-report" onclick="printOrdersReport()">🖨️ Print (A4)</button>
+      </div>
+      <div id="ordersReportBody"></div>
+    </div>
+  </section>
+
+  <!-- ── Settings page ──────────────────────────────────────────────────── -->
+  <section class="page" id="page-settings">
     <div class="sp-section">
       <h3>Branch</h3>
       <div class="branch-options" id="branchOptions">
@@ -261,6 +353,7 @@
 
     <div class="sp-section">
       <h3>Combos</h3>
+      <p class="sp-note">The "Category" field on fixed items (and the choice item's "Type keyword") is what groups items together in the Reports &rarr; Items Sold breakdown — e.g. every drink handed out inside a combo is still counted under "Drinks".</p>
       <div id="combosContainer"></div>
       <button class="combo-new-btn" onclick="addNewCombo()">+ New Combo</button>
     </div>
@@ -269,7 +362,8 @@
       <button class="btn-save-settings" onclick="saveSettings()">Save Changes</button>
       <span class="sp-save-status" id="spStatus"></span>
     </div>
-  </div>
+  </section>
+
 </div>
 
 <script>
@@ -281,8 +375,24 @@ let settingsData = {};
 let combosData = {};
 let dictFilter = '';
 let prefsFilter = '';
+let settingsLoaded = false;
 
-// ── Main app ──────────────────────────────────────────────────────────────────
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${name}`));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === name));
+  if (name === 'history' && !document.getElementById('histFrom').value) { setHistRange('month'); }
+  else if (name === 'history') { loadHistory(); }
+  if (name === 'reports' && !document.getElementById('repFrom').value) { setRepRange('month'); }
+  else if (name === 'reports') { loadReports(); }
+  if (name === 'settings' && !settingsLoaded) { loadSettingsData(); }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── New Order page ──────────────────────────────────────────────────────────
 async function parseOrder() {
   const text = document.getElementById('rawText').value.trim();
   if (!text) return;
@@ -346,6 +456,7 @@ function addItemRow(item = null) {
   const qty      = item?.qty ?? '1';
   const ar       = item?.arabic_name ?? '';
   const en       = item?.name ?? '';
+  const category = item?.category ?? '';
   const addOns   = item?.add_ons ?? [];
   const origAOs  = item?.original_add_ons ?? [];
   const comments = item?.comments ?? [];
@@ -373,6 +484,7 @@ function addItemRow(item = null) {
   const div = document.createElement('div');
   div.className = 'item-card';
   div.id = `item-${i}`;
+  div.dataset.category = category;
   div.innerHTML = `
     <div class="item-main">
       <div class="qty-badge" contenteditable id="qty${i}">${escHtml(qty)}</div>
@@ -419,7 +531,7 @@ function get(id) {
 async function printReceipt() {
   if (!parsedOrder) return;
   const items = [];
-  document.querySelectorAll('.item-card').forEach(card => {
+  document.querySelectorAll('#itemsList .item-card').forEach(card => {
     const id = card.id.replace('item-', '');
     if (card.dataset.bagHeader) {
       items.push({ is_bag_header: true, arabic_name: card.dataset.arabicName, qty: '', name: card.dataset.itemName, bag_size: parseInt(card.dataset.bagSize) || 0, comments: [] });
@@ -430,7 +542,7 @@ async function printReceipt() {
     if (!qty || !ar) return;
     const comments = [...card.querySelectorAll('.note-input')]
       .map(inp => inp.value.trim()).filter(Boolean);
-    items.push({ qty, arabic_name: ar, name: get(`en${id}`), comments });
+    items.push({ qty, arabic_name: ar, name: get(`en${id}`), category: card.dataset.category || '', comments });
   });
 
   const payload = { ...parsedOrder, customer: get('m-customer'), prepare_by: get('m-prepare'), order_num: get('m-order'), items };
@@ -467,7 +579,7 @@ function autoLearnCorrections() {
   parsedOrder.items.forEach(it => {
     if (it && it.name) originalByName[it.name.toLowerCase().trim()] = it;
   });
-  document.querySelectorAll('.item-card').forEach(card => {
+  document.querySelectorAll('#itemsList .item-card').forEach(card => {
     const id = card.id.replace('item-', '');
     const currentEn = get(`en${id}`);
     const currentAr = get(`ar${id}`);
@@ -503,8 +615,194 @@ function autoLearnCorrections() {
 
 }
 
-// ── Settings panel ────────────────────────────────────────────────────────────
-async function openSettings() {
+// ── Poll for orders from Chrome extension ─────────────────────────────────
+setInterval(async () => {
+  try {
+    const res = await fetch('/extension/pending');
+    const data = await res.json();
+    if (data && data.items) {
+      parsedOrder = data;
+      showPage('neworder');
+      renderUI(data);
+      document.getElementById('status').className = 'status';
+      document.getElementById('status').textContent = 'Order received from extension!';
+    }
+  } catch(e) {}
+}, 2500);
+
+// ── History page ──────────────────────────────────────────────────────────────
+function fmtDate(d) { return d.toISOString().slice(0, 10); }
+
+function setHistRange(kind) {
+  const today = new Date();
+  let from, to = fmtDate(today);
+  if (kind === 'today') { from = to; }
+  else if (kind === 'week') { const d = new Date(today); d.setDate(d.getDate() - 6); from = fmtDate(d); }
+  else if (kind === 'month') { from = fmtDate(new Date(today.getFullYear(), today.getMonth(), 1)); }
+  else if (kind === 'all') { from = '2000-01-01'; }
+  document.getElementById('histFrom').value = from;
+  document.getElementById('histTo').value = to;
+  loadHistory();
+}
+
+async function loadHistory() {
+  const from = document.getElementById('histFrom').value || '2000-01-01';
+  const to   = document.getElementById('histTo').value   || fmtDate(new Date());
+  const res = await fetch(`/history?from=${from}&to=${to}`);
+  const orders = await res.json();
+  document.getElementById('histTotal').textContent = `${orders.length} order(s) in range`;
+  const list = document.getElementById('historyList');
+  list.innerHTML = '';
+  if (!orders.length) { list.innerHTML = '<p class="empty-note">No orders found in this range.</p>'; return; }
+  orders.forEach(o => list.appendChild(buildHistoryCard(o)));
+}
+
+function buildHistoryCard(o) {
+  const card = document.createElement('div');
+  card.className = 'hist-card';
+  card.dataset.order = o.order_num;
+  card.innerHTML = `
+    <div class="hist-hd" onclick="toggleHistCard(this)">
+      <div class="hist-main">
+        <span class="hist-order">#${escHtml(o.order_num)}</span>
+        <span class="hist-customer">${escHtml(o.customer)}</span>
+      </div>
+      <div class="hist-meta">
+        <span class="hist-date">${escHtml(o.prepare_by || o.delivery_date)}</span>
+        <span class="hist-count">${o.item_count} item(s)</span>
+        ${o.scheduled ? '<span class="badge">SCHEDULED</span>' : ''}
+      </div>
+    </div>
+    <div class="hist-body">
+      <div class="preview-wrap" id="prev-${escHtml(o.order_num)}">Loading…</div>
+      <button class="btn-reprint" onclick="reprintOrder('${escHtml(o.order_num)}')">🖨️ Reprint</button>
+    </div>`;
+  return card;
+}
+
+async function toggleHistCard(hd) {
+  const card = hd.closest('.hist-card');
+  const wasOpen = card.classList.contains('open');
+  card.classList.toggle('open');
+  if (wasOpen) return;
+  const orderNum = card.dataset.order;
+  const prevEl = document.getElementById(`prev-${orderNum}`);
+  if (prevEl.dataset.loaded) return;
+  try {
+    const res = await fetch(`/history/order/${encodeURIComponent(orderNum)}`);
+    const order = await res.json();
+    prevEl.innerHTML = renderPreviewItems(order.items || []);
+    prevEl.dataset.loaded = '1';
+  } catch (e) {
+    prevEl.textContent = 'Failed to load order.';
+  }
+}
+
+function renderPreviewItems(items) {
+  let html = '<table class="preview-table">';
+  items.forEach(it => {
+    if (it.is_bag_header) { html += `<tr class="preview-bag"><td colspan="2">${escHtml(it.arabic_name)}</td></tr>`; return; }
+    const notes = (it.comments || []).filter(Boolean);
+    html += `<tr><td class="pq">${escHtml(it.qty)}</td><td>${escHtml(it.name)}${notes.length ? '<div class="preview-note">' + notes.map(escHtml).join(', ') + '</div>' : ''}</td></tr>`;
+  });
+  html += '</table>';
+  return html;
+}
+
+async function reprintOrder(orderNum) {
+  try {
+    const res = await fetch(`/history/reprint/${encodeURIComponent(orderNum)}`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) alert(data.error || 'Reprint failed');
+  } catch (e) {
+    alert('Reprint failed: ' + e.message);
+  }
+}
+
+// ── Reports page ───────────────────────────────────────────────────────────────
+function setRepRange(kind) {
+  const today = new Date();
+  let from, to = fmtDate(today);
+  if (kind === 'today') { from = to; }
+  else if (kind === 'week') { const d = new Date(today); d.setDate(d.getDate() - 6); from = fmtDate(d); }
+  else if (kind === 'month') { from = fmtDate(new Date(today.getFullYear(), today.getMonth(), 1)); }
+  document.getElementById('repFrom').value = from;
+  document.getElementById('repTo').value = to;
+  loadReports();
+}
+
+function showReportTab(tab) {
+  document.querySelectorAll('.report-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.getElementById('itemsReportPanel').style.display = tab === 'items' ? 'block' : 'none';
+  document.getElementById('ordersReportPanel').style.display = tab === 'orders' ? 'block' : 'none';
+}
+
+async function loadReports() {
+  const from = document.getElementById('repFrom').value;
+  const to   = document.getElementById('repTo').value;
+  if (!from || !to) return;
+  const [ir, or_] = await Promise.all([
+    fetch(`/reports/items?from=${from}&to=${to}`),
+    fetch(`/reports/orders?from=${from}&to=${to}`)
+  ]);
+  renderItemsReport(await ir.json());
+  renderOrdersReport(await or_.json());
+}
+
+function renderItemsReport(report) {
+  document.getElementById('itemsReportSummary').textContent = `${report.from} → ${report.to} · ${report.order_count} order(s)`;
+  const body = document.getElementById('itemsReportBody');
+  if (!report.categories.length) { body.innerHTML = '<p class="empty-note">No items sold in this range.</p>'; return; }
+  let html = '';
+  report.categories.forEach(cat => {
+    html += `<div class="report-cat-hd">${escHtml(cat.category)}</div>`;
+    html += '<table class="report-table"><tbody>';
+    cat.items.forEach(it => {
+      html += `<tr><td>${escHtml(it.name)}</td><td class="rq">${escHtml(it.qty_display)}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  });
+  body.innerHTML = html;
+}
+
+function renderOrdersReport(report) {
+  document.getElementById('ordersReportSummary').textContent = `${report.from} → ${report.to} · ${report.total_orders} order(s) total`;
+  const body = document.getElementById('ordersReportBody');
+  if (!report.days.length) { body.innerHTML = '<p class="empty-note">No orders in this range.</p>'; return; }
+  let html = '';
+  report.days.forEach(day => {
+    html += `<div class="report-day-hd"><span>${escHtml(day.date)}</span><span class="report-day-count">${day.count} order(s)</span></div>`;
+    html += '<table class="report-table"><thead><tr><th>Order #</th><th>Customer</th><th>Time</th></tr></thead><tbody>';
+    day.orders.forEach(o => {
+      html += `<tr><td>#${escHtml(o.order_num)}</td><td>${escHtml(o.customer)}</td><td>${escHtml(fmtTime(o.delivery_datetime))}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  });
+  body.innerHTML = html;
+}
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+async function printItemsReport() {
+  const from = document.getElementById('repFrom').value;
+  const to   = document.getElementById('repTo').value;
+  if (!from || !to) return;
+  await fetch('/reports/items/print', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to }) });
+}
+async function printOrdersReport() {
+  const from = document.getElementById('repFrom').value;
+  const to   = document.getElementById('repTo').value;
+  if (!from || !to) return;
+  await fetch('/reports/orders/print', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to }) });
+}
+
+// ── Settings page ────────────────────────────────────────────────────────────
+async function loadSettingsData() {
   try {
     const [dr, sr, pr, cr] = await Promise.all([fetch('/dictionary'), fetch('/settings'), fetch('/preferences'), fetch('/combos')]);
     dictData     = await dr.json();
@@ -517,6 +815,7 @@ async function openSettings() {
     prefsData    = {};
     combosData   = {};
   }
+  settingsLoaded = true;
   renderBranch();
   renderDict();
   renderPrefs();
@@ -524,15 +823,6 @@ async function openSettings() {
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
-  document.getElementById('overlay').classList.add('open');
-}
-
-function closeSettings() {
-  document.getElementById('overlay').classList.remove('open');
-}
-
-function overlayClick(e) {
-  if (e.target === document.getElementById('overlay')) closeSettings();
 }
 
 function selectBranch(el) {
@@ -569,10 +859,6 @@ function renderDict() {
     });
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
 function updateDictKey(input, oldKey) {
   const newKey = input.value.toLowerCase().trim();
   if (!newKey || newKey === oldKey) return;
@@ -580,7 +866,6 @@ function updateDictKey(input, oldKey) {
   delete dictData[oldKey];
   dictData[newKey] = val;
   input.dataset.key = newKey;
-  // update ar input's data-en
   const row = input.closest('tr');
   if (row) { const arInput = row.querySelector('.dict-input.ar'); if (arInput) arInput.dataset.en = newKey; }
 }
@@ -599,7 +884,6 @@ async function syncNewAr() {
   const en = document.getElementById('newEn').value.trim();
   const arInput = document.getElementById('newAr');
   if (!en || arInput.value) return;
-  // Check local dict first
   const key = en.toLowerCase();
   if (dictData[key]) { arInput.value = dictData[key]; return; }
 }
@@ -678,21 +962,6 @@ function addPrefRow() {
   prefsFilter = '';
   renderPrefs();
 }
-
-
-// ── Poll for orders from Chrome extension ─────────────────────────────────
-setInterval(async () => {
-  try {
-    const res = await fetch('/extension/pending');
-    const data = await res.json();
-    if (data && data.items) {
-      parsedOrder = data;
-      renderUI(data);
-      document.getElementById('status').className = 'status';
-      document.getElementById('status').textContent = 'Order received from extension!';
-    }
-  } catch(e) {}
-}, 2500);
 
 // ── Custom JSON file ──────────────────────────────────────────────────────────
 async function loadJsonFile() {
@@ -820,14 +1089,14 @@ function buildComboCard(name, cfg) {
     <div class="combo-subsection">
       <div class="combo-sub-hd">Fixed Items <small>— always in the bag, not selectable on Toters</small></div>
       <table class="combo-table">
-        <colgroup><col style="width:28%"><col style="width:28%"><col style="width:13%"><col style="width:18%"><col style="width:13%"></colgroup>
-        <thead><tr><th>Name (English)</th><th>Arabic (Receipt)</th><th>Qty</th><th>Label override</th><th></th></tr></thead>
+        <colgroup><col style="width:24%"><col style="width:22%"><col style="width:11%"><col style="width:15%"><col style="width:15%"><col style="width:13%"></colgroup>
+        <thead><tr><th>Name (English)</th><th>Arabic (Receipt)</th><th>Qty</th><th>Label override</th><th>Category</th><th></th></tr></thead>
         <tbody class="combo-fixed-body"></tbody>
       </table>
       <button class="combo-add-row-btn combo-add-fixed">+ Fixed Item</button>
     </div>
     <div class="combo-subsection">
-      <div class="combo-sub-hd">Choice Items <small>— customer picks on Toters ("Choose Two Salads &gt; ...")</small></div>
+      <div class="combo-sub-hd">Choice Items <small>— customer picks on Toters ("Choose Two Salads &gt; ...") — the type keyword also becomes its report category</small></div>
       <table class="combo-table">
         <colgroup><col style="width:60%"><col style="width:27%"><col style="width:13%"></colgroup>
         <thead><tr><th>Type keyword</th><th>Portions</th><th></th></tr></thead>
@@ -844,7 +1113,7 @@ function buildComboCard(name, cfg) {
   (cfg.choice_items || []).forEach((item, idx) => choiceTbody.appendChild(buildChoiceRow(name, item, idx)));
 
   body.querySelector('.combo-add-fixed').addEventListener('click', () => {
-    combosData[card.dataset.combo].fixed_items.push({name: '', portion: 1.0, qty_label: ''});
+    combosData[card.dataset.combo].fixed_items.push({name: '', portion: 1.0, qty_label: '', category: ''});
     const open = getOpenCards();
     renderCombos(open);
     const rebuilt = document.querySelector(`.combo-card[data-combo="${CSS.escape(card.dataset.combo)}"]`);
@@ -874,9 +1143,10 @@ function buildFixedRow(comboName, item, idx) {
     <td><input class="combo-input ar" value="${escHtml(arVal)}" placeholder="عربي"></td>
     <td><input class="combo-input num" type="number" value="${item.portion || 1}" min="0.25" step="0.25" style="width:100%"></td>
     <td><input class="combo-input" value="${escHtml(item.qty_label || '')}" placeholder="e.g. 1KG"></td>
+    <td><input class="combo-input" value="${escHtml(item.category || '')}" placeholder="e.g. Drinks"></td>
     <td><button class="combo-row-del" title="Remove">✕</button></td>
   `;
-  const [nameIn, arIn, portIn, labelIn, delBtn] = tr.querySelectorAll('input, button');
+  const [nameIn, arIn, portIn, labelIn, catIn, delBtn] = tr.querySelectorAll('input, button');
 
   const sync = () => {
     const items = combosData[comboName]?.fixed_items;
@@ -884,6 +1154,7 @@ function buildFixedRow(comboName, item, idx) {
     items[idx].name      = nameIn.value.trim();
     items[idx].portion   = parseFloat(portIn.value) || 1.0;
     items[idx].qty_label = labelIn.value.trim();
+    items[idx].category  = catIn.value.trim();
     const en = items[idx].name.toLowerCase();
     const ar = arIn.value.trim();
     if (en && ar) dictData[en] = ar;
@@ -892,6 +1163,7 @@ function buildFixedRow(comboName, item, idx) {
   arIn.addEventListener('blur', sync);
   portIn.addEventListener('change', sync);
   labelIn.addEventListener('blur', sync);
+  catIn.addEventListener('blur', sync);
   delBtn.addEventListener('click', () => {
     combosData[comboName]?.fixed_items.splice(idx, 1);
     renderCombos();
@@ -947,7 +1219,7 @@ async function saveSettings() {
     const [dd, sd, pd, cd] = await Promise.all([dr.json(), sr.json(), pr.json(), cr.json()]);
     if (dd.ok && sd.ok && pd.ok && cd.ok) {
       statusEl.textContent = '✅ Saved!';
-      setTimeout(() => { statusEl.textContent = ''; closeSettings(); }, 800);
+      setTimeout(() => { statusEl.textContent = ''; }, 1200);
     } else {
       statusEl.textContent = '⚠ Save failed';
     }
