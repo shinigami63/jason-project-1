@@ -61,38 +61,48 @@ COMBOS_WITH_BISCUITS_RAHA = {
 # on the Toters page. Listed first so they print at the top of each bag.
 COMBO_FIXED_ITEMS = {
     "taouk combo": [
-        {"name": "Taouk",        "portion": 1.0},
-        {"name": "French Fries", "portion": 0.5},
+        {"name": "Taouk",        "portion": 1.0, "category": "Grills"},
+        {"name": "French Fries", "portion": 0.5, "category": "Sides"},
     ],
     "meat combo": [
-        {"name": "Grilled Meat", "portion": 1.0},
-        {"name": "French Fries", "portion": 0.5},
+        {"name": "Grilled Meat", "portion": 1.0, "category": "Grills"},
+        {"name": "French Fries", "portion": 0.5, "category": "Sides"},
     ],
     "kafta combo": [
-        {"name": "Grilled Kafta", "portion": 1.0},
-        {"name": "French Fries",  "portion": 0.5},
+        {"name": "Grilled Kafta", "portion": 1.0, "category": "Grills"},
+        {"name": "French Fries",  "portion": 0.5, "category": "Sides"},
     ],
     "mixed grill combo": [
-        {"name": "Mixed Grills", "portion": 1.0},
-        {"name": "French Fries", "portion": 0.5},
+        {"name": "Mixed Grills", "portion": 1.0, "category": "Grills"},
+        {"name": "French Fries", "portion": 0.5, "category": "Sides"},
     ],
     "kebbe lovers box": [
-        {"name": "Kebbeh Zghertawiye (Fat)",    "portion": 1.0},
-        {"name": "Kebbeh Zghertawiye (Meat)",   "portion": 1.0},
-        {"name": "Kebbeh Zghertawiye (Labneh)", "portion": 1.0},
-        {"name": "French Fries",                "portion": 1.0},
+        {"name": "Kebbeh Zghertawiye (Fat)",    "portion": 1.0, "category": "Kebbeh"},
+        {"name": "Kebbeh Zghertawiye (Meat)",   "portion": 1.0, "category": "Kebbeh"},
+        {"name": "Kebbeh Zghertawiye (Labneh)", "portion": 1.0, "category": "Kebbeh"},
+        {"name": "French Fries",                "portion": 1.0, "category": "Sides"},
     ],
     "family sharing combo": [
-        {"name": "Mixed Grills", "portion": 1.0, "qty_label": "1KG"},
-        {"name": "French Fries", "portion": 2.0},
+        {"name": "Mixed Grills", "portion": 1.0, "qty_label": "1KG", "category": "Grills"},
+        {"name": "French Fries", "portion": 2.0, "category": "Sides"},
     ],
     "vegan combo": [
-        {"name": "Pumpkin Kebbeh (4 pcs)", "portion": 1.0},
-        {"name": "French Fries",           "portion": 0.5},
+        {"name": "Pumpkin Kebbeh (4 pcs)", "portion": 1.0, "category": "Kebbeh"},
+        {"name": "French Fries",           "portion": 0.5, "category": "Sides"},
     ],
     "kebbe tray combo": [
-        {"name": "Cucumber With Laban", "portion": 0.5},
+        {"name": "Cucumber With Laban", "portion": 0.5, "category": "Mezza"},
     ],
+}
+
+# Maps the "type" keyword used in a combo's customer-choice lines (e.g.
+# "Choose Two Salads > ...") to the category label used in item reports.
+CHOICE_TYPE_CATEGORIES = {
+    "kebbeh": "Kebbeh",
+    "salad":  "Salads",
+    "mezza":  "Mezza",
+    "drink":  "Drinks",
+    "water":  "Water",
 }
 
 
@@ -129,14 +139,14 @@ def _prepare_by(text):
 
 _ARABIC_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠']
 
-def _make_combo_item(name, portion):
+def _make_combo_item(name, portion, category='Other'):
     return {
         'qty':              _format_qty(portion),
         'name':             name,
         'variant':          None,
         'add_ons':          [],
         'original_add_ons': [],
-        'category':         'Combos',
+        'category':         category,
         'is_raw':           False,
         'arabic_name':      name,
     }
@@ -155,7 +165,7 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
 
     # 1. Fixed items always in this combo (not selectable by customer on Toters)
     for fixed in COMBO_FIXED_ITEMS.get(combo_name_lower, []):
-        item = _make_combo_item(fixed['name'], fixed['portion'])
+        item = _make_combo_item(fixed['name'], fixed['portion'], fixed.get('category') or 'Other')
         if 'qty_label' in fixed:
             item['qty'] = fixed['qty_label']
         per_bag.append(item)
@@ -182,7 +192,8 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
                 if qm:
                     portion = float(qm.group(1))
 
-        per_bag.append(_make_combo_item(item_name, portion))
+        item_category = CHOICE_TYPE_CATEGORIES.get(this_type, this_type.title() if this_type else 'Other')
+        per_bag.append(_make_combo_item(item_name, portion, item_category))
 
     # 3. Biscuits & Raha (always appended last for applicable combos)
     if combo_name_lower in COMBOS_WITH_BISCUITS_RAHA:
@@ -192,7 +203,7 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'variant':          None,
             'add_ons':          [],
             'original_add_ons': [],
-            'category':         'Combos',
+            'category':         'Other',
             'is_raw':           False,
             'arabic_name':      'بسكوت وراحة قطعتين مطبقين',
         })

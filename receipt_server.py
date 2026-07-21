@@ -1,10 +1,11 @@
-import threading, os, sys, platform, subprocess
+import threading, os, sys, platform, subprocess, sqlite3, re, tempfile
+from html import escape as _esc
 try:
     import webview
     _HAS_WEBVIEW = True
 except ImportError:
     _HAS_WEBVIEW = False
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 import json
 
@@ -19,6 +20,7 @@ def get_data_path(filename):
 DICTIONARY_PATH = get_data_path('dictionary.json')
 PREFERENCES_PATH = get_data_path('preferences.json')
 COMBOS_PATH = get_data_path('combos.json')
+HISTORY_DB_PATH = get_data_path('order_history.db')
 _using_custom_dict = False
 
 def get_ui_path():
@@ -184,8 +186,8 @@ DEFAULT_COMBOS = {
     "taouk combo": {
         "has_biscuits_raha": True,
         "fixed_items": [
-            {"name": "Taouk",        "portion": 1.0},
-            {"name": "French Fries", "portion": 0.5},
+            {"name": "Taouk",        "portion": 1.0, "category": "Grills"},
+            {"name": "French Fries", "portion": 0.5, "category": "Sides"},
         ],
         "choice_items": [
             {"type": "salad",  "portion": 0.5},
@@ -197,8 +199,8 @@ DEFAULT_COMBOS = {
     "meat combo": {
         "has_biscuits_raha": True,
         "fixed_items": [
-            {"name": "Grilled Meat", "portion": 1.0},
-            {"name": "French Fries", "portion": 0.5},
+            {"name": "Grilled Meat", "portion": 1.0, "category": "Grills"},
+            {"name": "French Fries", "portion": 0.5, "category": "Sides"},
         ],
         "choice_items": [
             {"type": "salad",  "portion": 0.5},
@@ -210,8 +212,8 @@ DEFAULT_COMBOS = {
     "kafta combo": {
         "has_biscuits_raha": True,
         "fixed_items": [
-            {"name": "Grilled Kafta", "portion": 1.0},
-            {"name": "French Fries",  "portion": 0.5},
+            {"name": "Grilled Kafta", "portion": 1.0, "category": "Grills"},
+            {"name": "French Fries",  "portion": 0.5, "category": "Sides"},
         ],
         "choice_items": [
             {"type": "salad",  "portion": 0.5},
@@ -223,8 +225,8 @@ DEFAULT_COMBOS = {
     "mixed grill combo": {
         "has_biscuits_raha": True,
         "fixed_items": [
-            {"name": "Mixed Grills", "portion": 1.0},
-            {"name": "French Fries", "portion": 0.5},
+            {"name": "Mixed Grills", "portion": 1.0, "category": "Grills"},
+            {"name": "French Fries", "portion": 0.5, "category": "Sides"},
         ],
         "choice_items": [
             {"type": "salad",  "portion": 0.5},
@@ -236,10 +238,10 @@ DEFAULT_COMBOS = {
     "kebbe lovers box": {
         "has_biscuits_raha": False,
         "fixed_items": [
-            {"name": "Kebbeh Zghertawiye (Fat)",    "portion": 1.0},
-            {"name": "Kebbeh Zghertawiye (Meat)",   "portion": 1.0},
-            {"name": "Kebbeh Zghertawiye (Labneh)", "portion": 1.0},
-            {"name": "French Fries",                "portion": 1.0},
+            {"name": "Kebbeh Zghertawiye (Fat)",    "portion": 1.0, "category": "Kebbeh"},
+            {"name": "Kebbeh Zghertawiye (Meat)",   "portion": 1.0, "category": "Kebbeh"},
+            {"name": "Kebbeh Zghertawiye (Labneh)", "portion": 1.0, "category": "Kebbeh"},
+            {"name": "French Fries",                "portion": 1.0, "category": "Sides"},
         ],
         "choice_items": [
             {"type": "salad",  "portion": 1.0},
@@ -249,8 +251,8 @@ DEFAULT_COMBOS = {
     "family sharing combo": {
         "has_biscuits_raha": False,
         "fixed_items": [
-            {"name": "Mixed Grills", "portion": 1.0, "qty_label": "1KG"},
-            {"name": "French Fries", "portion": 2.0},
+            {"name": "Mixed Grills", "portion": 1.0, "qty_label": "1KG", "category": "Grills"},
+            {"name": "French Fries", "portion": 2.0, "category": "Sides"},
         ],
         "choice_items": [
             {"type": "salad",   "portion": 2.0},
@@ -261,8 +263,8 @@ DEFAULT_COMBOS = {
     "vegan combo": {
         "has_biscuits_raha": True,
         "fixed_items": [
-            {"name": "Pumpkin Kebbeh (4 pcs)", "portion": 1.0},
-            {"name": "French Fries",           "portion": 0.5},
+            {"name": "Pumpkin Kebbeh (4 pcs)", "portion": 1.0, "category": "Kebbeh"},
+            {"name": "French Fries",           "portion": 0.5, "category": "Sides"},
         ],
         "choice_items": [
             {"type": "salad",  "portion": 0.5},
@@ -274,7 +276,7 @@ DEFAULT_COMBOS = {
     "kebbe tray combo": {
         "has_biscuits_raha": True,
         "fixed_items": [
-            {"name": "Cucumber With Laban", "portion": 0.5},
+            {"name": "Cucumber With Laban", "portion": 0.5, "category": "Mezza"},
         ],
         "choice_items": [
             {"type": "kebbeh", "portion": 1.0},
@@ -365,6 +367,8 @@ def _apply_combos(data):
             entry = {'name': item['name'], 'portion': float(item['portion'])}
             if item.get('qty_label'):
                 entry['qty_label'] = item['qty_label']
+            if item.get('category'):
+                entry['category'] = item['category']
             fi.append(entry)
         if fi:
             fixed[combo_name] = fi
@@ -404,6 +408,186 @@ COMBOS_DATA = load_combos()
 _apply_combos(COMBOS_DATA)
 PENDING_ORDER = None
 
+# ── Order history (SQLite, stored inside the app's own data folder) ──────────
+def _db():
+    conn = sqlite3.connect(HISTORY_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_history_db():
+    conn = _db()
+    conn.execute('''CREATE TABLE IF NOT EXISTS orders (
+        order_num          TEXT PRIMARY KEY,
+        customer            TEXT,
+        prepare_by          TEXT,
+        delivery_date        TEXT,
+        delivery_datetime    TEXT,
+        scheduled            INTEGER,
+        branch                TEXT,
+        printed_at            TEXT,
+        items_json            TEXT
+    )''')
+    conn.execute('''CREATE TABLE IF NOT EXISTS order_items (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_num       TEXT,
+        delivery_date    TEXT,
+        name              TEXT,
+        category           TEXT,
+        qty                 TEXT
+    )''')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(delivery_date)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_items_date ON order_items(delivery_date)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_items_order ON order_items(order_num)')
+    conn.commit()
+    conn.close()
+
+init_history_db()
+
+def parse_prepare_by_dt(prepare_by):
+    try:
+        dt = datetime.strptime(prepare_by, '%b %d, %I:%M %p').replace(year=datetime.now().year)
+        # Orders printed near year-end for early-January delivery dates would
+        # otherwise land a year in the future; pull them back a year instead.
+        if dt - datetime.now() > timedelta(days=180):
+            dt = dt.replace(year=dt.year - 1)
+        return dt
+    except (ValueError, TypeError):
+        return None
+
+def save_order_to_history(d):
+    order_num = str(d.get('order_num') or '').strip()
+    if not order_num:
+        return
+    dt = parse_prepare_by_dt(d.get('prepare_by', ''))
+    delivery_date = dt.strftime('%Y-%m-%d') if dt else datetime.now().strftime('%Y-%m-%d')
+    delivery_datetime = dt.isoformat() if dt else datetime.now().isoformat()
+    items = d.get('items') or []
+
+    conn = _db()
+    conn.execute('DELETE FROM order_items WHERE order_num = ?', (order_num,))
+    conn.execute('''INSERT INTO orders
+            (order_num, customer, prepare_by, delivery_date, delivery_datetime, scheduled, branch, printed_at, items_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(order_num) DO UPDATE SET
+            customer=excluded.customer, prepare_by=excluded.prepare_by,
+            delivery_date=excluded.delivery_date, delivery_datetime=excluded.delivery_datetime,
+            scheduled=excluded.scheduled, branch=excluded.branch,
+            printed_at=excluded.printed_at, items_json=excluded.items_json''',
+        (order_num, d.get('customer', ''), d.get('prepare_by', ''), delivery_date, delivery_datetime,
+         1 if d.get('scheduled') else 0, SETTINGS.get('branch', ''), datetime.now().isoformat(),
+         json.dumps(items, ensure_ascii=False)))
+    for item in items:
+        if item.get('is_bag_header'):
+            continue
+        conn.execute('INSERT INTO order_items (order_num, delivery_date, name, category, qty) VALUES (?, ?, ?, ?, ?)',
+            (order_num, delivery_date, item.get('name', ''), (item.get('category') or '').strip() or 'Other', item.get('qty', '')))
+    conn.commit()
+    conn.close()
+
+def get_stored_order(order_num):
+    conn = _db()
+    row = conn.execute('SELECT * FROM orders WHERE order_num = ?', (order_num,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        'order_num':  row['order_num'],
+        'customer':   row['customer'],
+        'prepare_by': row['prepare_by'],
+        'scheduled':  bool(row['scheduled']),
+        'items':      json.loads(row['items_json']),
+    }
+
+def history_list(date_from, date_to):
+    conn = _db()
+    rows = conn.execute('''
+        SELECT o.order_num, o.customer, o.prepare_by, o.delivery_date, o.delivery_datetime, o.scheduled,
+               (SELECT COUNT(*) FROM order_items oi WHERE oi.order_num = o.order_num) AS item_count
+        FROM orders o
+        WHERE o.delivery_date BETWEEN ? AND ?
+        ORDER BY o.delivery_datetime DESC''', (date_from, date_to)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def parse_qty(qty_str):
+    s = (qty_str or '').strip()
+    if not s:
+        return ('count', 0.0)
+    m = re.match(r'^(\d+(?:\.\d+)?)\s*(KG|G)$', s, re.IGNORECASE)
+    if m:
+        val = float(m.group(1))
+        grams = val * 1000 if m.group(2).upper() == 'KG' else val
+        return ('weight', grams)
+    m = re.match(r'^(\d+)?½$', s)
+    if m:
+        whole = int(m.group(1)) if m.group(1) else 0
+        return ('count', whole + 0.5)
+    m = re.match(r'^\d+(\.\d+)?$', s)
+    if m:
+        return ('count', float(s))
+    return ('label', s)
+
+def _fmt_count(v):
+    whole = int(v)
+    frac = v - whole
+    if abs(frac - 0.5) < 0.01:
+        return '½' if whole == 0 else f'{whole}½'
+    if abs(v - whole) < 0.01:
+        return str(whole)
+    return f'{v:g}'
+
+def _fmt_summed_qty(g):
+    parts = []
+    if g['count']:
+        parts.append(_fmt_count(g['count']))
+    if g['weight']:
+        w = g['weight']
+        parts.append(f'{w / 1000:g}KG' if w >= 1000 else f'{w:g}G')
+    for label, cnt in sorted(g['labels'].items()):
+        parts.append(f'{label} ×{cnt}')
+    return ' + '.join(parts) if parts else '0'
+
+def items_report(date_from, date_to):
+    conn = _db()
+    rows = conn.execute('SELECT category, name, qty FROM order_items WHERE delivery_date BETWEEN ? AND ?',
+                         (date_from, date_to)).fetchall()
+    order_count = conn.execute('SELECT COUNT(*) c FROM orders WHERE delivery_date BETWEEN ? AND ?',
+                                (date_from, date_to)).fetchone()['c']
+    conn.close()
+
+    groups = {}
+    for r in rows:
+        cat = (r['category'] or 'Other').strip() or 'Other'
+        name = r['name'] or 'Unknown'
+        g = groups.setdefault(cat, {}).setdefault(name, {'count': 0.0, 'weight': 0.0, 'labels': {}})
+        kind, val = parse_qty(r['qty'])
+        if kind == 'count':
+            g['count'] += val
+        elif kind == 'weight':
+            g['weight'] += val
+        else:
+            g['labels'][val] = g['labels'].get(val, 0) + 1
+
+    categories = []
+    for cat in sorted(groups.keys()):
+        items = [{'name': name, 'qty_display': _fmt_summed_qty(groups[cat][name])}
+                  for name in sorted(groups[cat].keys())]
+        categories.append({'category': cat, 'items': items})
+    return {'categories': categories, 'order_count': order_count, 'from': date_from, 'to': date_to}
+
+def orders_report(date_from, date_to):
+    conn = _db()
+    rows = conn.execute('''SELECT order_num, customer, delivery_date, delivery_datetime FROM orders
+                            WHERE delivery_date BETWEEN ? AND ? ORDER BY delivery_datetime DESC''',
+                         (date_from, date_to)).fetchall()
+    conn.close()
+    days = {}
+    for r in rows:
+        days.setdefault(r['delivery_date'], []).append(
+            {'order_num': r['order_num'], 'customer': r['customer'], 'delivery_datetime': r['delivery_datetime']})
+    day_list = [{'date': d, 'orders': days[d], 'count': len(days[d])} for d in sorted(days.keys(), reverse=True)]
+    return {'days': day_list, 'total_orders': len(rows), 'from': date_from, 'to': date_to}
+
 # ── Translation ───────────────────────────────────────────────────────────────
 def translate_word(name):
     key = name.lower().strip()
@@ -439,20 +623,24 @@ def parse():
     translate_items(order['items'])
     return jsonify(order)
 
+def _open_temp_html(html):
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.html', mode='w', encoding='utf-8')
+    tmp.write(html)
+    tmp.close()
+    if platform.system() == 'Windows':
+        os.startfile(tmp.name)
+    elif platform.system() == 'Darwin':
+        subprocess.Popen(['open', tmp.name])
+    else:
+        subprocess.Popen(['xdg-open', tmp.name])
+
 @app.route('/receipt', methods=['POST'])
 def receipt():
     try:
-        html = build_receipt(request.json)
-        import tempfile
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.html', mode='w', encoding='utf-8')
-        tmp.write(html)
-        tmp.close()
-        if platform.system() == 'Windows':
-            os.startfile(tmp.name)
-        elif platform.system() == 'Darwin':
-            subprocess.Popen(['open', tmp.name])
-        else:
-            subprocess.Popen(['xdg-open', tmp.name])
+        d = request.json
+        html = build_receipt(d)
+        _open_temp_html(html)
+        save_order_to_history(d)
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -576,6 +764,71 @@ def set_json_file():
     _write_settings(SETTINGS)
     return jsonify({'ok': True, 'count': len(DICTIONARY), 'path': path})
 
+# ── History & reports ─────────────────────────────────────────────────────────
+def _range_args():
+    date_from = request.args.get('from') or '0001-01-01'
+    date_to = request.args.get('to') or '9999-12-31'
+    return date_from, date_to
+
+@app.route('/history', methods=['GET'])
+def history_route():
+    date_from, date_to = _range_args()
+    return jsonify(history_list(date_from, date_to))
+
+@app.route('/history/order/<order_num>', methods=['GET'])
+def history_order_route(order_num):
+    order = get_stored_order(order_num)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+    return jsonify(order)
+
+@app.route('/history/reprint/<order_num>', methods=['POST'])
+def history_reprint_route(order_num):
+    order = get_stored_order(order_num)
+    if not order:
+        return jsonify({'ok': False, 'error': 'Order not found'}), 404
+    try:
+        html = build_receipt(order)
+        _open_temp_html(html)
+        save_order_to_history(order)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/reports/items', methods=['GET'])
+def reports_items_route():
+    date_from, date_to = _range_args()
+    return jsonify(items_report(date_from, date_to))
+
+@app.route('/reports/orders', methods=['GET'])
+def reports_orders_route():
+    date_from, date_to = _range_args()
+    return jsonify(orders_report(date_from, date_to))
+
+@app.route('/reports/items/print', methods=['POST'])
+def reports_items_print_route():
+    data = request.json or {}
+    date_from = data.get('from') or '0001-01-01'
+    date_to = data.get('to') or '9999-12-31'
+    try:
+        html = build_items_report_html(items_report(date_from, date_to))
+        _open_temp_html(html)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/reports/orders/print', methods=['POST'])
+def reports_orders_print_route():
+    data = request.json or {}
+    date_from = data.get('from') or '0001-01-01'
+    date_to = data.get('to') or '9999-12-31'
+    try:
+        html = build_orders_report_html(orders_report(date_from, date_to))
+        _open_temp_html(html)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
 # ── Chrome extension endpoints ───────────────────────────────────────────────
 @app.route('/extension/parse', methods=['POST'])
 def extension_parse():
@@ -628,11 +881,8 @@ def build_receipt(d):
             idx += 1
 
     EN_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
-    try:
-        dt = datetime.strptime(d['prepare_by'], '%b %d, %I:%M %p').replace(year=datetime.now().year)
-        day_ar = DICTIONARY.get(EN_DAYS[dt.weekday()], EN_DAYS[dt.weekday()])
-    except (ValueError, KeyError):
-        day_ar = ''
+    dt = parse_prepare_by_dt(d.get('prepare_by', ''))
+    day_ar = DICTIONARY.get(EN_DAYS[dt.weekday()], EN_DAYS[dt.weekday()]) if dt else ''
 
     sched    = '<div class="sched">مجدول ⏰</div>' if d.get('scheduled') else ''
     time_lbl = 'تجهيز قبل' if d.get('scheduled') else 'وقت التجهيز'
@@ -689,6 +939,74 @@ body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;f
   {rows}
   <div class="ft"><b>شكراً!</b></div>
 </div>
+<script>window.onload=()=>window.print()</script>
+</body></html>'''
+
+# ── A4 report builders ────────────────────────────────────────────────────────
+_REPORT_STYLE = '''
+@page { size: A4; margin: 16mm; }
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}
+h1{font-size:21px;margin:0 0 2px}
+.sub{color:#666;font-size:12.5px;margin-bottom:20px}
+.cat-hd{background:#111;color:#fff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;padding:6px 10px;margin-top:14px}
+.day-hd{display:flex;justify-content:space-between;align-items:baseline;background:#f2f2f2;border-bottom:2px solid #111;padding:6px 10px;margin-top:14px;font-weight:700;font-size:13px}
+.day-hd span{font-weight:400;color:#666;font-size:12px}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:#666;border-bottom:1.5px solid #ccc;padding:5px 10px}
+td{padding:5px 10px;border-bottom:1px solid #eee;font-size:12.5px}
+.qty{text-align:right;font-weight:700;white-space:nowrap}
+.foot{margin-top:24px;padding-top:10px;border-top:1px solid #ccc;font-size:11px;color:#888}
+.empty{padding:16px 10px;color:#888;font-size:13px}
+'''
+
+def build_items_report_html(report):
+    body = ''
+    if not report['categories']:
+        body = '<div class="empty">No items sold in this range.</div>'
+    for cat in report['categories']:
+        body += f'<div class="cat-hd">{_esc(cat["category"])}</div>'
+        body += '<table><tbody>'
+        for item in cat['items']:
+            body += f'<tr><td>{_esc(item["name"])}</td><td class="qty">{_esc(item["qty_display"])}</td></tr>'
+        body += '</tbody></table>'
+
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Items Sold Report</title>
+<style>{_REPORT_STYLE}</style></head>
+<body>
+<h1>Items Sold Report</h1>
+<div class="sub">{report["from"]} &rarr; {report["to"]} &nbsp;|&nbsp; {report["order_count"]} order(s)</div>
+{body}
+<div class="foot">Kebbet Zamen &mdash; Generated {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
+<script>window.onload=()=>window.print()</script>
+</body></html>'''
+
+def build_orders_report_html(report):
+    body = ''
+    if not report['days']:
+        body = '<div class="empty">No orders in this range.</div>'
+    for day in report['days']:
+        body += f'<div class="day-hd">{_esc(day["date"])}<span>{day["count"]} order(s)</span></div>'
+        body += '<table><thead><tr><th>Order #</th><th>Customer</th><th>Delivery time</th></tr></thead><tbody>'
+        for o in day['orders']:
+            dt = None
+            try:
+                dt = datetime.fromisoformat(o['delivery_datetime'])
+            except (ValueError, TypeError):
+                pass
+            time_str = dt.strftime('%b %d, %I:%M %p') if dt else (o['delivery_datetime'] or '')
+            body += f'<tr><td>#{_esc(o["order_num"])}</td><td>{_esc(o["customer"])}</td><td>{_esc(time_str)}</td></tr>'
+        body += '</tbody></table>'
+
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Orders Report</title>
+<style>{_REPORT_STYLE}</style></head>
+<body>
+<h1>Orders Report</h1>
+<div class="sub">{report["from"]} &rarr; {report["to"]} &nbsp;|&nbsp; {report["total_orders"]} order(s) total</div>
+{body}
+<div class="foot">Kebbet Zamen &mdash; Generated {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
 <script>window.onload=()=>window.print()</script>
 </body></html>'''
 
