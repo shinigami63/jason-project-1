@@ -313,6 +313,8 @@ DEFAULT_PREFERENCES = {
     "frozen": "مجمد",
     "fried": "مقلي",
     "garlic & coriander": "ثوم وكزبرة",
+    "with bread": "مع خبز",
+    "without bread": "بدون خبز",
 }
 
 def load_preferences():
