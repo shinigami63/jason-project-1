@@ -312,6 +312,7 @@ def _write_dictionary(d):
 DEFAULT_PREFERENCES = {
     "frozen": "مجمد",
     "fried": "مقلي",
+    "garlic & coriander": "ثوم وكزبرة",
 }
 
 def load_preferences():
