@@ -556,6 +556,7 @@ async function printReceipt() {
     const res  = await fetch('/receipt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await res.json();
     if (data.ok) {
+      clearOrderForm();
       status.className = 'status';
       status.textContent = '✅ Receipt printed!';
     } else {
@@ -569,6 +570,15 @@ async function printReceipt() {
     btn.disabled = false;
     btn.innerHTML = '🖨️ Print Receipt';
   }
+}
+
+function clearOrderForm() {
+  parsedOrder = null;
+  itemCount = 0;
+  document.getElementById('rawText').value = '';
+  document.getElementById('metaCard').innerHTML = '';
+  document.getElementById('itemsList').innerHTML = '';
+  document.getElementById('itemsSection').style.display = 'none';
 }
 
 function autoLearnCorrections() {
