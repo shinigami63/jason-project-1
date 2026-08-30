@@ -317,6 +317,15 @@ DEFAULT_PREFERENCES = {
     "without bread": "بدون خبز",
 }
 
+# Tray/portion size labels shown in the qty badge (e.g. "Choose Portion >
+# Medium Tray") — translated separately from PREFERENCES since they replace
+# the qty itself rather than appearing as a kitchen note.
+QTY_LABELS = {
+    "small tray": "صينية صغيرة",
+    "medium tray": "صينية وسط",
+    "large tray": "صينية كبيرة",
+}
+
 def load_preferences():
     saved = {}
     if os.path.exists(PREFERENCES_PATH):
@@ -641,6 +650,7 @@ def translate_items(items):
             continue
         item['add_ons']     = translate_add_ons(item.get('add_ons', []))
         item['arabic_name'] = translate_word(item['name'])
+        item['qty']         = QTY_LABELS.get(str(item.get('qty', '')).lower().strip(), item.get('qty'))
         name_key = item['name'].lower().strip()
         if item.get('category') == 'Combos' and 'biscuit' in name_key and 'raha' in name_key:
             item['arabic_name'] = 'بسكوت وراحة قطعتين مطبقين'
