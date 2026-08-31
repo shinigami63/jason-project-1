@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify
 import json
 
 from receipt_image import render_receipt_image
-from printer_client import print_receipt_image as send_to_printer, list_windows_printers
+from printer_client import print_receipt_image as send_to_printer, list_windows_printers, set_default_printer
 
 app = Flask(__name__)
 
@@ -406,6 +406,11 @@ DEFAULT_SETTINGS = {
     'printer_width_mm': 72,
     'printer_expected_max_mm': 420,  # just a "warn if longer than usual" threshold
     'printer_cut_mode': 'FULL',      # 'FULL' or 'PART'
+    # A4 report printer -- Items Sold / Orders Sold reports still open the
+    # normal browser print preview (not silent like receipts), this just
+    # makes that dialog default to the right printer instead of whichever
+    # one Windows happened to have set as default.
+    'a4_printer_name': '',
 }
 
 def load_settings():
@@ -910,6 +915,7 @@ def reports_items_print_route():
     date_to = data.get('to') or '9999-12-31'
     try:
         html = build_items_report_html(items_report(date_from, date_to))
+        set_default_printer(SETTINGS.get('a4_printer_name', ''))
         _open_temp_html(html)
         return jsonify({'ok': True})
     except Exception as e:
@@ -922,6 +928,7 @@ def reports_orders_print_route():
     date_to = data.get('to') or '9999-12-31'
     try:
         html = build_orders_report_html(orders_report(date_from, date_to))
+        set_default_printer(SETTINGS.get('a4_printer_name', ''))
         _open_temp_html(html)
         return jsonify({'ok': True})
     except Exception as e:

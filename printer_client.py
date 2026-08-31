@@ -28,6 +28,23 @@ def list_windows_printers():
     return sorted(p[2] for p in win32print.EnumPrinters(flags))
 
 
+def set_default_printer(name):
+    """Best-effort: makes `name` the Windows default printer, so the next
+    print dialog a browser opens (e.g. for an A4 report) comes up
+    pre-selected to it instead of whatever the system default happened to
+    be. Silently does nothing if unset or unsupported (non-Windows) --
+    this is a convenience, not something print correctness depends on: the
+    operator still sees the normal preview/dialog and can pick a different
+    printer there if they want."""
+    if not name:
+        return
+    try:
+        import win32print
+        win32print.SetDefaultPrinter(name)
+    except Exception:
+        pass
+
+
 def _connect(mode, printer_name, ip, port, timeout):
     if mode == 'windows_name':
         if not printer_name:
