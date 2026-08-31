@@ -285,7 +285,7 @@ class ReceiptCanvas:
         for text_line in lines:
             line = _Line(self.d, text_line, weight, size)
             if line_h is None:
-                line_h = (line.ascent + line.descent) * 1.3
+                line_h = line.ascent + line.descent
             line.draw_right_aligned(self.img, right_x, self.y, fill)
             self.y += line_h
         return len(lines)
@@ -317,12 +317,14 @@ class ReceiptCanvas:
                     fill=BLACK, width=max(1, self.mm(0.5)))
 
     def render_item(self, item):
+        self.y += self.mm(2.5)
         self.qty_badge(item.get('qty', ''), item.get('arabic_name', ''))
         for c in item.get('comments') or []:
             if not c:
                 continue
             self.advance(self.mm(1))
             self.note(c)
+        self.y += self.mm(2.5)
 
     def bag_frame(self, title, bag_items):
         self.y += self.mm(3)
@@ -340,7 +342,7 @@ class ReceiptCanvas:
         for i, item in enumerate(bag_items):
             self.render_item(item)
             if i < len(bag_items) - 1:
-                self.dotted_line(gap_after=self.mm(1), fill=GRAY)
+                self.dotted_line(fill=GRAY)
 
         self.d.rectangle([left, top, right, self.y], outline=BLACK, width=border_w)
         self.y += self.mm(2)
@@ -425,7 +427,7 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
             c.bag_frame(item['arabic_name'], bag_items)
         else:
             if not is_first:
-                c.dotted_line(gap_after=c.mm(1))
+                c.dotted_line()
             c.render_item(item)
             idx += 1
         is_first = False
