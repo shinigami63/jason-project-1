@@ -61,53 +61,57 @@ def _fonts_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 
 
-# Amiri: an open Arabic face with clean OpenType shaping data. Only ships
-# Regular/Bold (no Black), so any requested weight >=700 maps to Bold.
-_FONT_FILES = {False: 'Amiri-Regular.ttf', True: 'Amiri-Bold.ttf'}
+# Cairo: a variable font (Weight axis 200-1000) designed for real Arabic
+# OpenType shaping -- its cmap doesn't fully cover the legacy Arabic
+# Presentation Forms block (that broke the earlier presentation-forms
+# substitution approach), but its GSUB contextual-joining tables are
+# exactly what HarfBuzz needs and are complete.
+_FONT_FILE = 'Cairo.ttf'
 
 _PIL_FONT_CACHE = {}
-_HB_FACE_CACHE = {}
+_HB_FACE = None
 _HB_FONT_CACHE = {}
 _FT_FACE_CACHE = {}
 
 
-def _font_path(bold):
-    return os.path.join(_fonts_dir(), _FONT_FILES[bold])
+def _font_path():
+    return os.path.join(_fonts_dir(), _FONT_FILE)
 
 
 def _font(weight, size):
     """PIL font, used to draw/measure the non-Arabic (Latin/digit) runs --
     those don't need shaping, plain cmap-based glyph lookup is correct."""
-    bold = weight >= 700
-    key = (bold, size)
+    key = (weight, size)
     f = _PIL_FONT_CACHE.get(key)
     if f is None:
-        f = ImageFont.truetype(_font_path(bold), size)
+        f = ImageFont.truetype(_font_path(), size)
+        f.set_variation_by_axes([weight, 0])
         _PIL_FONT_CACHE[key] = f
     return f
 
 
-def _hb_font(bold, size):
-    key = (bold, size)
+def _hb_font(weight, size):
+    global _HB_FACE
+    key = (weight, size)
     f = _HB_FONT_CACHE.get(key)
     if f is None:
-        face = _HB_FACE_CACHE.get(bold)
-        if face is None:
-            face = hb.Face(hb.Blob.from_file_path(_font_path(bold)))
-            _HB_FACE_CACHE[bold] = face
-        f = hb.Font(face)
+        if _HB_FACE is None:
+            _HB_FACE = hb.Face(hb.Blob.from_file_path(_font_path()))
+        f = hb.Font(_HB_FACE)
         f.scale = (size * 64, size * 64)
         hb.ot_font_set_funcs(f)
+        f.set_variations({'wght': weight, 'slnt': 0})
         _HB_FONT_CACHE[key] = f
     return f
 
 
-def _ft_face(bold, size):
-    key = (bold, size)
+def _ft_face(weight, size):
+    key = (weight, size)
     f = _FT_FACE_CACHE.get(key)
     if f is None:
-        f = freetype.Face(_font_path(bold))
+        f = freetype.Face(_font_path())
         f.set_char_size(size * 64)
+        f.set_var_design_coords([weight, 0])
         _FT_FACE_CACHE[key] = f
     return f
 
@@ -117,21 +121,19 @@ def _shape_arabic(chunk, weight, size):
     glyph_positions, total_width_px) -- positions are already in the
     correct left-to-right *drawing* order (HarfBuzz pre-reverses an RTL
     buffer for you), so callers just walk the list and advance rightward."""
-    bold = weight >= 700
     buf = hb.Buffer()
     buf.add_str(chunk)
     buf.direction = 'rtl'
     buf.script = 'Arab'
     buf.language = 'ar'
-    hb.shape(_hb_font(bold, size), buf)
+    hb.shape(_hb_font(weight, size), buf)
     width = sum(p.x_advance for p in buf.glyph_positions) / 64
     return buf.glyph_infos, buf.glyph_positions, width
 
 
 def _draw_arabic_run(img, chunk, weight, size, x, baseline_y, fill):
-    bold = weight >= 700
     infos, positions, _ = _shape_arabic(chunk, weight, size)
-    face = _ft_face(bold, size)
+    face = _ft_face(weight, size)
     pen_x = x
     for info, pos in zip(infos, positions):
         face.load_glyph(info.codepoint, freetype.FT_LOAD_RENDER)

@@ -24,7 +24,7 @@ jobs:
 
       - name: Build EXE
         run: |
-          pyinstaller --onefile --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Amiri-Regular.ttf;fonts" --add-data "fonts/Amiri-Bold.ttf;fonts" --name "KebzetZamen" receipt_server.py
+          pyinstaller --onefile --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Cairo.ttf;fonts" --name "KebzetZamen" receipt_server.py
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
