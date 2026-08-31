@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 import json
 
+from receipt_image import render_receipt_image
+from printer_client import print_receipt_image as send_to_printer
+
 app = Flask(__name__)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -391,15 +394,32 @@ def _apply_combos(data):
     extract.COMBOS_WITH_BISCUITS_RAHA = biscuits
 
 # ── Settings persistence ──────────────────────────────────────────────────────
+DEFAULT_SETTINGS = {
+    'branch': 'الأشرفية',
+    # Network ESC/POS thermal printer -- receipts are rendered to an image
+    # and sent straight to this printer, no browser/print-dialog involved.
+    'printer_ip': '',
+    'printer_port': 9100,
+    'printer_width_px': 576,   # printable dots across the roll width
+    'printer_width_mm': 72,
+    'printer_expected_max_mm': 420,  # just a "warn if longer than usual" threshold
+    'printer_cut_mode': 'FULL',      # 'FULL' or 'PART'
+}
+
 def load_settings():
     path = get_data_path('settings.json')
+    saved = {}
     if os.path.exists(path):
         try:
             with open(path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                saved = json.load(f)
         except Exception:
             pass
-    return {'branch': 'الأشرفية'}
+    d = dict(DEFAULT_SETTINGS)
+    d.update(saved)
+    if d != saved:
+        _write_settings(d)
+    return d
 
 def _write_settings(s):
     path = get_data_path('settings.json')
@@ -687,9 +707,28 @@ def _open_temp_html(html):
 def receipt():
     try:
         d = request.json
-        html = build_receipt(d)
-        _open_temp_html(html)
+        warning = print_receipt(d)
         save_order_to_history(d)
+        resp = {'ok': True}
+        if warning:
+            resp['warning'] = warning
+        return jsonify(resp)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/printer/test', methods=['POST'])
+def printer_test():
+    try:
+        ctx = {
+            'customer': 'Test Print', 'prepare_by': datetime.now().strftime('%b %d, %I:%M %p'),
+            'order_num': '0000', 'branch': SETTINGS.get('branch', 'الأشرفية'),
+            'time_lbl': 'وقت التجهيز', 'scheduled': False, 'day_ar': '',
+            'items': [{'qty': '1', 'arabic_name': 'طباعة تجريبية', 'comments': ['إذا وصلك هذا فالطابعة تعمل بشكل صحيح']}],
+        }
+        img = render_receipt_image(ctx, width_px=int(SETTINGS.get('printer_width_px', 576)),
+                                    width_mm=float(SETTINGS.get('printer_width_mm', 72)))
+        send_to_printer(img, ip=SETTINGS.get('printer_ip', ''), port=int(SETTINGS.get('printer_port', 9100)),
+                         cut_mode=SETTINGS.get('printer_cut_mode', 'FULL'))
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -837,10 +876,12 @@ def history_reprint_route(order_num):
     if not order:
         return jsonify({'ok': False, 'error': 'Order not found'}), 404
     try:
-        html = build_receipt(order)
-        _open_temp_html(html)
+        warning = print_receipt(order)
         save_order_to_history(order)
-        return jsonify({'ok': True})
+        resp = {'ok': True}
+        if warning:
+            resp['warning'] = warning
+        return jsonify(resp)
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
@@ -905,91 +946,41 @@ def add_cors(response):
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     return response
 
-# ── Receipt builder ───────────────────────────────────────────────────────────
-def _item_html(item):
-    notes_html = ''.join(
-        f'<div class="note">{c}</div>'
-        for c in item.get('comments', []) if c
-    )
-    return f'''<div class="item"><div class="row"><span class="qty">{item["qty"]}</span><span class="iname">{item["arabic_name"]}</span></div>{notes_html}</div>'''
-
-def build_receipt(d):
-    items = d['items']
-    rows = ''
-    idx = 0
-    while idx < len(items):
-        item = items[idx]
-        if item.get('is_bag_header'):
-            bag_size = item.get('bag_size', 0)
-            bag_slice = items[idx + 1: idx + 1 + bag_size]
-            idx += 1 + bag_size
-            inner = ''.join(_item_html(bi) for bi in bag_slice)
-            rows += f'<div class="bag-frame"><div class="bag-title">{item["arabic_name"]}</div>{inner}</div>'
-        else:
-            rows += _item_html(item)
-            idx += 1
-
+# ── Receipt printing ────────────────────────────────────────────────────────
+def _receipt_context(d):
     EN_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     dt = parse_prepare_by_dt(d.get('prepare_by', ''))
     day_ar = DICTIONARY.get(EN_DAYS[dt.weekday()], EN_DAYS[dt.weekday()]) if dt else ''
+    return {
+        'customer':   d.get('customer', ''),
+        'prepare_by': d.get('prepare_by', ''),
+        'order_num':  d.get('order_num', ''),
+        'branch':     SETTINGS.get('branch', 'الأشرفية'),
+        'time_lbl':   'تجهيز قبل' if d.get('scheduled') else 'وقت التجهيز',
+        'scheduled':  bool(d.get('scheduled')),
+        'day_ar':     day_ar,
+        'items':      d.get('items') or [],
+    }
 
-    sched    = '<div class="sched">مجدول ⏰</div>' if d.get('scheduled') else ''
-    time_lbl = 'تجهيز قبل' if d.get('scheduled') else 'وقت التجهيز'
-    branch   = SETTINGS.get('branch', 'الأشرفية')
+def print_receipt(d):
+    """Renders the receipt to an image and sends it straight to the
+    configured ESC/POS printer, cutting after. Returns a warning string if
+    the receipt ran unusually long (still printed in full either way), or
+    None."""
+    ctx = _receipt_context(d)
+    width_px = int(SETTINGS.get('printer_width_px', 576))
+    width_mm = float(SETTINGS.get('printer_width_mm', 72))
+    img = render_receipt_image(ctx, width_px=width_px, width_mm=width_mm)
 
-    return f'''<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head><meta charset="UTF-8">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-*{{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-@page{{size:72mm auto;margin:0}}
-body{{font-family:'Cairo',Arial,sans-serif;width:72mm;margin:0 auto;color:#000;font-size:11px;direction:rtl}}
-.r{{padding:4mm}}
-.hd{{text-align:center;padding-bottom:3mm;border-bottom:2px dashed #000}}
-.logo{{font-size:20px;font-weight:900}}
-.br{{font-size:12px;font-weight:600;margin-top:1mm}}
-.toters{{font-size:18px;font-weight:900;color:#000;margin-top:2mm;letter-spacing:3px}}
-.sched{{background:#000;color:#fff;text-align:center;padding:1mm;font-size:11px;font-weight:700;margin-top:1mm}}
-.info{{padding:3mm 0;border-bottom:1px dashed #000}}
-.ir{{display:flex;justify-content:space-between;margin-bottom:1.5mm;font-size:11px}}
-.il{{color:#000}}
-.iv{{font-weight:700;font-size:13px}}
-.ih{{background:#000;color:#fff;text-align:center;padding:1.5mm;font-size:12px;font-weight:700;margin:2mm 0 0}}
-.item{{padding:2.5mm 2mm;border-bottom:1px dotted #000}}
-.item:last-child{{border-bottom:none}}
-.row{{display:flex;align-items:center;gap:2mm}}
-.qty{{background:#000;color:#fff;font-weight:900;font-size:16px;padding:0 2mm;border-radius:2px;flex-shrink:0;min-width:8mm;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-.iname{{font-weight:700;font-size:16px}}
-.note{{font-size:14px;font-weight:700;color:#000;margin-top:1mm;margin-right:6mm;border-right:3px solid #000;padding-right:1.5mm}}
-.bag-frame{{border:2.5px solid #000;border-radius:3px;margin:3mm 0 2mm;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-.bag-title{{background:#000;color:#fff;text-align:center;padding:2.5mm;font-size:15px;font-weight:900;letter-spacing:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-.bag-frame .item{{padding:2.5mm 2mm;border-bottom:1px dotted #888}}
-.bag-frame .item:last-child{{border-bottom:none}}
-.ft{{text-align:center;margin-top:4mm;padding-top:3mm;border-top:2px dashed #000;font-size:10px;color:#000}}
-.ft b{{font-size:13px;color:#000}}
-.day{{font-size:20px;font-weight:900;text-align:center;margin-top:2mm}}
-</style></head>
-<body>
-<div class="r">
-  <div class="hd">
-    <div class="logo">كبة زمان</div>
-    <div class="br">فرع {branch}</div>
-    <div class="toters">TOTERS</div>
-    {sched}
-    {'<div class="day">' + day_ar + '</div>' if day_ar else ''}
-  </div>
-  <div class="info">
-    <div class="ir"><span class="il">الزبون</span><span class="iv">{d["customer"]}</span></div>
-    <div class="ir"><span class="il">{time_lbl}</span><span class="iv">{d["prepare_by"]}</span></div>
-    <div class="ir"><span class="il">رقم الطلب</span><span class="iv">#{d["order_num"]}</span></div>
-  </div>
-  <div class="ih">الطلبية</div>
-  {rows}
-  <div class="ft"><b>شكراً!</b></div>
-</div>
-<script>window.onload=()=>window.print()</script>
-</body></html>'''
+    send_to_printer(img, ip=SETTINGS.get('printer_ip', ''), port=int(SETTINGS.get('printer_port', 9100)),
+                     cut_mode=SETTINGS.get('printer_cut_mode', 'FULL'))
+
+    dpmm = width_px / width_mm
+    length_mm = img.height / dpmm
+    expected = float(SETTINGS.get('printer_expected_max_mm', 420))
+    if length_mm > expected:
+        return f'Receipt ran long: {length_mm:.0f}mm (usual max ~{expected:.0f}mm) — check the roll has enough paper left.'
+    return None
 
 # ── A4 report builders ────────────────────────────────────────────────────────
 _REPORT_STYLE = '''

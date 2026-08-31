@@ -179,6 +179,14 @@
   .sp-save-status { font-size: 13px; color: var(--muted); }
 
   .sp-note { font-size: 13px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .printer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .printer-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .printer-field input { width: 100%; padding: 11px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 15px; }
+  .printer-field input:focus { outline: none; border-color: var(--red); }
+  .printer-actions { display: flex; align-items: center; gap: 10px; }
+  .btn-test-print { background: #111; color: #fff; border: none; border-radius: 7px; padding: 11px 18px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-test-print:hover { background: #333; }
+  .printer-status { font-size: 13px; color: var(--muted); }
   .json-file-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .json-file-input { flex: 1; min-width: 140px; padding: 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 16px; font-family: monospace; }
   .json-file-input:focus { outline: none; border-color: var(--red); }
@@ -295,6 +303,22 @@
         <div class="branch-opt" data-branch="الأشرفية" onclick="selectBranch(this)">الأشرفية</div>
         <div class="branch-opt" data-branch="الذوق" onclick="selectBranch(this)">الذوق</div>
         <div class="branch-opt" data-branch="dbayeh" onclick="selectBranch(this)">Dbayeh</div>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <h3>Receipt Printer</h3>
+      <p class="sp-note">Receipts print straight to this network thermal printer — no browser or print dialog. Paper feeds only as far as the receipt content plus a small tail, then auto-cuts; "Expected max length" is just used to warn you if an order prints unusually long, it never cuts an order short.</p>
+      <div class="printer-grid">
+        <div class="printer-field"><label>Printer IP address</label><input id="pIp" placeholder="192.168.1.50" oninput="settingsData.printer_ip = this.value.trim()"></div>
+        <div class="printer-field"><label>Port</label><input id="pPort" type="number" placeholder="9100" oninput="settingsData.printer_port = parseInt(this.value) || 9100"></div>
+        <div class="printer-field"><label>Paper width (mm)</label><input id="pWidthMm" type="number" placeholder="72" oninput="settingsData.printer_width_mm = parseFloat(this.value) || 72"></div>
+        <div class="printer-field"><label>Print width (dots)</label><input id="pWidthPx" type="number" placeholder="576" oninput="settingsData.printer_width_px = parseInt(this.value) || 576"></div>
+        <div class="printer-field"><label>Expected max length (mm)</label><input id="pMaxMm" type="number" placeholder="420" oninput="settingsData.printer_expected_max_mm = parseFloat(this.value) || 420"></div>
+      </div>
+      <div class="printer-actions">
+        <button class="btn-test-print" onclick="testPrinter()">🖨️ Test Print</button>
+        <span class="printer-status" id="printerTestStatus"></span>
       </div>
     </div>
 
@@ -557,8 +581,8 @@ async function printReceipt() {
     const data = await res.json();
     if (data.ok) {
       clearOrderForm();
-      status.className = 'status';
-      status.textContent = '✅ Receipt printed!';
+      status.className = data.warning ? 'status err' : 'status';
+      status.textContent = data.warning ? '✅ Printed — ⚠ ' + data.warning : '✅ Receipt printed!';
     } else {
       status.className = 'status err';
       status.textContent = '⚠ ' + (data.error || 'Print failed');
@@ -830,9 +854,31 @@ async function loadSettingsData() {
   renderDict();
   renderPrefs();
   renderCombos([]);
+  renderPrinterFields();
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
+}
+
+function renderPrinterFields() {
+  document.getElementById('pIp').value      = settingsData.printer_ip || '';
+  document.getElementById('pPort').value    = settingsData.printer_port || 9100;
+  document.getElementById('pWidthMm').value = settingsData.printer_width_mm || 72;
+  document.getElementById('pWidthPx').value = settingsData.printer_width_px || 576;
+  document.getElementById('pMaxMm').value   = settingsData.printer_expected_max_mm || 420;
+}
+
+async function testPrinter() {
+  const statusEl = document.getElementById('printerTestStatus');
+  statusEl.textContent = 'Sending test print…';
+  try {
+    await fetch('/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsData) });
+    const res  = await fetch('/printer/test', { method: 'POST' });
+    const data = await res.json();
+    statusEl.textContent = data.ok ? '✅ Test print sent!' : '⚠ ' + (data.error || 'Test print failed');
+  } catch (e) {
+    statusEl.textContent = '⚠ ' + e.message;
+  }
 }
 
 function selectBranch(el) {

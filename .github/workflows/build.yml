@@ -20,11 +20,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install flask pyinstaller pywebview
+          pip install flask pyinstaller pywebview pillow python-escpos
 
       - name: Build EXE
         run: |
-          pyinstaller --onefile --noconsole --add-data "ui.html;." --add-data "extract.py;." --name "KebzetZamen" receipt_server.py
+          pyinstaller --onefile --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Cairo.ttf;fonts" --name "KebzetZamen" receipt_server.py
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
