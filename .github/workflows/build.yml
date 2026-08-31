@@ -24,7 +24,19 @@ jobs:
 
       - name: Build EXE
         run: |
-          pyinstaller --onefile --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Cairo.ttf;fonts" --name "KebzetZamen" receipt_server.py
+          pyinstaller --onefile --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Cairo.ttf;fonts" --collect-data escpos --name "KebzetZamen" receipt_server.py
+
+      # Files the app loads at runtime (the UI, the Arabic font, python-escpos's
+      # printer capabilities table) are data, not imports, so PyInstaller only
+      # bundles them if it's told to -- and when one is missed the .exe builds
+      # fine and then fails on the till instead. Fail the build here instead.
+      - name: Verify runtime resources are bundled
+        run: |
+          $toc = Get-Content build/KebzetZamen/PKG-00.toc -Raw
+          foreach ($f in @('ui.html', 'extract.py', 'Cairo.ttf', 'capabilities.json')) {
+            if ($toc -notmatch [regex]::Escape($f)) { throw "not bundled into the exe: $f" }
+            Write-Host "bundled: $f"
+          }
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
