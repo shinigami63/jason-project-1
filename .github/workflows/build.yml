@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install flask pyinstaller pywebview pillow python-escpos
+          pip install flask pyinstaller pywebview pillow python-escpos pywin32
 
       - name: Build EXE
         run: |

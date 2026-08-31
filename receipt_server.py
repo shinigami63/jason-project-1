@@ -396,8 +396,10 @@ def _apply_combos(data):
 # ── Settings persistence ──────────────────────────────────────────────────────
 DEFAULT_SETTINGS = {
     'branch': 'الأشرفية',
-    # Network ESC/POS thermal printer -- receipts are rendered to an image
-    # and sent straight to this printer, no browser/print-dialog involved.
+    # Thermal printer -- receipts are rendered to an image and sent
+    # straight to this printer, no browser/print-dialog involved.
+    'printer_mode': 'windows_name',  # 'windows_name' or 'network_ip'
+    'printer_name': 'kitchen',       # Windows printer name (Devices & Printers)
     'printer_ip': '',
     'printer_port': 9100,
     'printer_width_px': 576,   # printable dots across the roll width
@@ -727,8 +729,7 @@ def printer_test():
         }
         img = render_receipt_image(ctx, width_px=int(SETTINGS.get('printer_width_px', 576)),
                                     width_mm=float(SETTINGS.get('printer_width_mm', 72)))
-        send_to_printer(img, ip=SETTINGS.get('printer_ip', ''), port=int(SETTINGS.get('printer_port', 9100)),
-                         cut_mode=SETTINGS.get('printer_cut_mode', 'FULL'))
+        _send_to_printer(img)
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -962,6 +963,12 @@ def _receipt_context(d):
         'items':      d.get('items') or [],
     }
 
+def _send_to_printer(img):
+    send_to_printer(img, mode=SETTINGS.get('printer_mode', 'windows_name'),
+                     printer_name=SETTINGS.get('printer_name', ''),
+                     ip=SETTINGS.get('printer_ip', ''), port=int(SETTINGS.get('printer_port', 9100)),
+                     cut_mode=SETTINGS.get('printer_cut_mode', 'FULL'))
+
 def print_receipt(d):
     """Renders the receipt to an image and sends it straight to the
     configured ESC/POS printer, cutting after. Returns a warning string if
@@ -972,8 +979,7 @@ def print_receipt(d):
     width_mm = float(SETTINGS.get('printer_width_mm', 72))
     img = render_receipt_image(ctx, width_px=width_px, width_mm=width_mm)
 
-    send_to_printer(img, ip=SETTINGS.get('printer_ip', ''), port=int(SETTINGS.get('printer_port', 9100)),
-                     cut_mode=SETTINGS.get('printer_cut_mode', 'FULL'))
+    _send_to_printer(img)
 
     dpmm = width_px / width_mm
     length_mm = img.height / dpmm

@@ -181,8 +181,8 @@
   .sp-note { font-size: 13px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
   .printer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
   .printer-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-  .printer-field input { width: 100%; padding: 11px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 15px; }
-  .printer-field input:focus { outline: none; border-color: var(--red); }
+  .printer-field input, .printer-field select { width: 100%; padding: 11px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 15px; font-family: inherit; background: #fff; }
+  .printer-field input:focus, .printer-field select:focus { outline: none; border-color: var(--red); }
   .printer-actions { display: flex; align-items: center; gap: 10px; }
   .btn-test-print { background: #111; color: #fff; border: none; border-radius: 7px; padding: 11px 18px; font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-test-print:hover { background: #333; }
@@ -308,10 +308,17 @@
 
     <div class="sp-section">
       <h3>Receipt Printer</h3>
-      <p class="sp-note">Receipts print straight to this network thermal printer — no browser or print dialog. Paper feeds only as far as the receipt content plus a small tail, then auto-cuts; "Expected max length" is just used to warn you if an order prints unusually long, it never cuts an order short.</p>
+      <p class="sp-note">Receipts print straight to this thermal printer — no browser or print dialog. Paper feeds only as far as the receipt content plus a small tail, then auto-cuts; "Expected max length" is just used to warn you if an order prints unusually long, it never cuts an order short.</p>
       <div class="printer-grid">
-        <div class="printer-field"><label>Printer IP address</label><input id="pIp" placeholder="192.168.1.50" oninput="settingsData.printer_ip = this.value.trim()"></div>
-        <div class="printer-field"><label>Port</label><input id="pPort" type="number" placeholder="9100" oninput="settingsData.printer_port = parseInt(this.value) || 9100"></div>
+        <div class="printer-field"><label>Connection</label>
+          <select id="pMode" onchange="settingsData.printer_mode = this.value; renderPrinterFields()">
+            <option value="windows_name">Windows printer name</option>
+            <option value="network_ip">Network (IP address)</option>
+          </select>
+        </div>
+        <div class="printer-field" id="pNameField"><label>Windows printer name</label><input id="pName" placeholder="kitchen" oninput="settingsData.printer_name = this.value.trim()"></div>
+        <div class="printer-field" id="pIpField"><label>Printer IP address</label><input id="pIp" placeholder="192.168.1.50" oninput="settingsData.printer_ip = this.value.trim()"></div>
+        <div class="printer-field" id="pPortField"><label>Port</label><input id="pPort" type="number" placeholder="9100" oninput="settingsData.printer_port = parseInt(this.value) || 9100"></div>
         <div class="printer-field"><label>Paper width (mm)</label><input id="pWidthMm" type="number" placeholder="72" oninput="settingsData.printer_width_mm = parseFloat(this.value) || 72"></div>
         <div class="printer-field"><label>Print width (dots)</label><input id="pWidthPx" type="number" placeholder="576" oninput="settingsData.printer_width_px = parseInt(this.value) || 576"></div>
         <div class="printer-field"><label>Expected max length (mm)</label><input id="pMaxMm" type="number" placeholder="420" oninput="settingsData.printer_expected_max_mm = parseFloat(this.value) || 420"></div>
@@ -861,11 +868,17 @@ async function loadSettingsData() {
 }
 
 function renderPrinterFields() {
+  const mode = settingsData.printer_mode || 'windows_name';
+  document.getElementById('pMode').value    = mode;
+  document.getElementById('pName').value    = settingsData.printer_name || '';
   document.getElementById('pIp').value      = settingsData.printer_ip || '';
   document.getElementById('pPort').value    = settingsData.printer_port || 9100;
   document.getElementById('pWidthMm').value = settingsData.printer_width_mm || 72;
   document.getElementById('pWidthPx').value = settingsData.printer_width_px || 576;
   document.getElementById('pMaxMm').value   = settingsData.printer_expected_max_mm || 420;
+  document.getElementById('pNameField').style.display = mode === 'windows_name' ? '' : 'none';
+  document.getElementById('pIpField').style.display   = mode === 'network_ip'   ? '' : 'none';
+  document.getElementById('pPortField').style.display = mode === 'network_ip'   ? '' : 'none';
 }
 
 async function testPrinter() {
