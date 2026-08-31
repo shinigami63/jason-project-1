@@ -8,6 +8,8 @@ full configured maximum length.
 import os
 import sys
 
+import arabic_reshaper
+from bidi.algorithm import get_display
 from PIL import Image, ImageDraw, ImageFont
 
 BLACK = (0, 0, 0)
@@ -15,21 +17,44 @@ WHITE = (255, 255, 255)
 GRAY = (150, 150, 150)
 
 
-def _font_path():
-    if getattr(sys, 'frozen', False):
-        return os.path.join(sys._MEIPASS, 'fonts', 'Cairo.ttf')
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts', 'Cairo.ttf')
+def _shape(text):
+    """Reshapes Arabic letters into their joined presentation forms and
+    reorders the string into visual (left-to-right rendering) order via
+    the Unicode bidi algorithm, so it can be drawn with a plain text()
+    call. We do this ourselves in pure Python instead of using Pillow's
+    direction=/language=/features= kwargs (which route through raqm) --
+    raqm is a native library that a PyInstaller-frozen exe doesn't
+    reliably bundle, which throws "setting text direction, language or
+    font features is not supported without libraqm" at print time on a
+    real install even though it worked fine in dev. Safe no-op on
+    plain ASCII text (numbers, "TOTERS", English times/names)."""
+    return get_display(arabic_reshaper.reshape(text))
 
+
+def _fonts_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, 'fonts')
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+
+
+# Amiri instead of a variable-weight font like Cairo: it's one of the few
+# open Arabic faces whose cmap fully covers the legacy Arabic Presentation
+# Forms codepoints that arabic_reshaper substitutes in (see _shape() above)
+# -- most modern Arabic webfonts, Cairo included, only shape correctly
+# through an OpenType engine like harfbuzz/raqm and render as broken/missing
+# glyphs otherwise. Amiri only ships Regular/Bold, no Black, so any
+# requested weight >=700 maps to Bold and everything else to Regular.
+_FONT_FILES = {False: 'Amiri-Regular.ttf', True: 'Amiri-Bold.ttf'}
 
 _FONT_CACHE = {}
 
 
 def _font(weight, size):
-    key = (weight, size)
+    bold = weight >= 700
+    key = (bold, size)
     f = _FONT_CACHE.get(key)
     if f is None:
-        f = ImageFont.truetype(_font_path(), size)
-        f.set_variation_by_axes([weight, 0])
+        f = ImageFont.truetype(os.path.join(_fonts_dir(), _FONT_FILES[bold]), size)
         _FONT_CACHE[key] = f
     return f
 
@@ -52,13 +77,12 @@ class ReceiptCanvas:
     # ── primitives ──────────────────────────────────────────────────────
     def center_text(self, text, weight, size, gap_after=0, fill=BLACK, spacing=0):
         font = _font(weight, size)
-        rtl = not text.isascii()
         if spacing:
             self._center_spaced(text, font, spacing, fill)
         else:
-            bbox = self.d.textbbox((0, 0), text, font=font, direction='rtl' if rtl else 'ltr')
-            self.d.text((self.w / 2, self.y), text, font=font, fill=fill, anchor='ma',
-                        direction='rtl' if rtl else 'ltr')
+            text = _shape(text)
+            bbox = self.d.textbbox((0, 0), text, font=font)
+            self.d.text((self.w / 2, self.y), text, font=font, fill=fill, anchor='ma')
             # anchor='ma' positions self.y at the font's ascender line, which
             # sits above the glyphs' visual top -- advance by the bbox's
             # bottom offset (not its height) or the next element overlaps.
@@ -100,28 +124,34 @@ class ReceiptCanvas:
         self.y += gap_before
         pad = self.mm(1.5) if pad is None else pad
         font = _font(weight, size)
-        bbox = self.d.textbbox((0, 0), text, font=font, direction='rtl')
+        text = _shape(text)
+        bbox = self.d.textbbox((0, 0), text, font=font)
         bar_h = (bbox[3] - bbox[1]) + 2 * pad
         self.d.rectangle([self.pad, self.y, self.w - self.pad, self.y + bar_h], fill=BLACK)
-        self.d.text((self.w / 2, self.y + bar_h / 2), text, font=font, fill=WHITE, anchor='mm', direction='rtl')
+        self.d.text((self.w / 2, self.y + bar_h / 2), text, font=font, fill=WHITE, anchor='mm')
         self.y += bar_h + gap_after
 
     def info_row(self, label, value, label_size=22, value_size=26):
         lf, vf = _font(400, label_size), _font(700, value_size)
-        lb = self.d.textbbox((0, 0), label, font=lf, direction='rtl')
-        vb = self.d.textbbox((0, 0), str(value), font=vf, direction='rtl')
-        self.d.text((self.w - self.pad, self.y), label, font=lf, fill=BLACK, anchor='ra', direction='rtl')
-        self.d.text((self.pad, self.y), str(value), font=vf, fill=BLACK, anchor='la', direction='rtl')
+        label, value = _shape(label), _shape(str(value))
+        lb = self.d.textbbox((0, 0), label, font=lf)
+        vb = self.d.textbbox((0, 0), value, font=vf)
+        self.d.text((self.w - self.pad, self.y), label, font=lf, fill=BLACK, anchor='ra')
+        self.d.text((self.pad, self.y), value, font=vf, fill=BLACK, anchor='la')
         # anchor='.a' draws relative to the ascender line, not the glyph top
         # -- advance past whichever bbox's *bottom* offset extends further.
         self.y += max(lb[3], vb[3]) + self.mm(1.5)
 
     def wrapped_rtl(self, text, font, right_x, max_width, fill=BLACK):
-        words = text.split(' ')
+        # Reshape (letter-joining forms) but don't reorder yet -- word-wrap
+        # needs to walk the text in logical order, same as the original
+        # string. Each finished line is bidi-reordered on its own right
+        # before drawing, once its content is fixed.
+        words = arabic_reshaper.reshape(text).split(' ')
         lines, cur = [], ''
         for word in words:
             trial = (cur + ' ' + word).strip()
-            if not cur or self.d.textlength(trial, font=font, direction='rtl') <= max_width:
+            if not cur or self.d.textlength(trial, font=font) <= max_width:
                 cur = trial
             else:
                 lines.append(cur)
@@ -131,14 +161,14 @@ class ReceiptCanvas:
         probe = self.d.textbbox((0, 0), 'Aأج', font=font)
         line_h = (probe[3] - probe[1]) * 1.3
         for line in lines:
-            self.d.text((right_x, self.y), line, font=font, fill=fill, anchor='ra', direction='rtl')
+            self.d.text((right_x, self.y), get_display(line), font=font, fill=fill, anchor='ra')
             self.y += line_h
         return len(lines)
 
     def qty_badge(self, qty, name, qty_size=28, name_size=28):
         qf, nf = _font(900, qty_size), _font(700, name_size)
         qty_str = str(qty)
-        qb = self.d.textbbox((0, 0), qty_str, font=qf, direction='ltr')
+        qb = self.d.textbbox((0, 0), qty_str, font=qf)
         badge_w = max(self.mm(8), (qb[2] - qb[0]) + 2 * self.mm(2))
         badge_h = (qb[3] - qb[1]) + self.mm(2)
         top = self.y
@@ -177,11 +207,12 @@ class ReceiptCanvas:
         top = self.y
 
         title_font = _font(900, 26)
-        tb = self.d.textbbox((0, 0), title, font=title_font, direction='rtl')
+        title = _shape(title)
+        tb = self.d.textbbox((0, 0), title, font=title_font)
         title_h = (tb[3] - tb[1]) + 2 * self.mm(2.5)
         self.d.rectangle([left, top, right, top + title_h], fill=BLACK)
         self.d.text(((left + right) / 2, top + title_h / 2), title, font=title_font, fill=WHITE,
-                    anchor='mm', direction='rtl')
+                    anchor='mm')
         self.y = top + title_h + self.mm(1.5)
 
         for i, item in enumerate(bag_items):
