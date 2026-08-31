@@ -179,6 +179,27 @@
   .sp-save-status { font-size: 13px; color: var(--muted); }
 
   .sp-note { font-size: 13px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .printer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .printer-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .printer-field input, .printer-field select { width: 100%; padding: 11px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 15px; font-family: inherit; background: #fff; }
+  .printer-field input:focus, .printer-field select:focus { outline: none; border-color: var(--red); }
+  .printer-name-field { margin-bottom: 12px; }
+  .btn-scan-printers { background: #111; color: #fff; border: none; border-radius: 7px; padding: 0 16px; height: 42px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-scan-printers:hover { background: #333; }
+  .btn-scan-printers:disabled { opacity: .6; cursor: default; }
+  .printer-pick-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .printer-pick-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 14px; }
+  .ppi-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ppi-roles { display: flex; gap: 6px; flex-shrink: 0; }
+  .role-btn { border: 1.5px solid var(--border); background: #fff; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--muted); }
+  .role-btn:hover { border-color: #999; }
+  .role-btn.role-receipt.active { border-color: var(--red); background: #fff8f8; color: var(--red); }
+  .role-btn.role-a4.active { border-color: #111; background: #111; color: #fff; }
+  .printer-pick-empty { font-size: 13px; color: var(--muted); padding: 4px 2px; }
+  .printer-actions { display: flex; align-items: center; gap: 10px; }
+  .btn-test-print { background: #111; color: #fff; border: none; border-radius: 7px; padding: 11px 18px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-test-print:hover { background: #333; }
+  .printer-status { font-size: 13px; color: var(--muted); }
   .json-file-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .json-file-input { flex: 1; min-width: 140px; padding: 12px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 16px; font-family: monospace; }
   .json-file-input:focus { outline: none; border-color: var(--red); }
@@ -295,6 +316,50 @@
         <div class="branch-opt" data-branch="الأشرفية" onclick="selectBranch(this)">الأشرفية</div>
         <div class="branch-opt" data-branch="الذوق" onclick="selectBranch(this)">الذوق</div>
         <div class="branch-opt" data-branch="dbayeh" onclick="selectBranch(this)">Dbayeh</div>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <h3>Printers</h3>
+      <p class="sp-note">Scan for printers paired to this PC, then tag each one as the <b>Receipt</b> printer (the kitchen roll — prints silently, no dialog, auto-cuts) or the <b>A4 Report</b> printer (used for the Items Sold / Orders Sold reports — still opens the normal print preview, just pre-selected to this printer). A printer can only hold one role.</p>
+      <div class="printer-actions">
+        <button type="button" class="btn-scan-printers" onclick="scanPrinters()">🔄 Scan for printers</button>
+      </div>
+      <div class="printer-pick-list" id="printerPickList"></div>
+    </div>
+
+    <div class="sp-section">
+      <h3>Receipt Printer</h3>
+      <p class="sp-note">Receipts print straight to this thermal printer — no browser or print dialog. Paper feeds only as far as the receipt content plus a small tail, then auto-cuts; "Expected max length" is just used to warn you if an order prints unusually long, it never cuts an order short.</p>
+      <div class="printer-grid">
+        <div class="printer-field"><label>Connection</label>
+          <select id="pMode" onchange="settingsData.printer_mode = this.value; renderPrinterFields()">
+            <option value="windows_name">Windows printer name</option>
+            <option value="network_ip">Network (IP address)</option>
+          </select>
+        </div>
+        <div class="printer-field" id="pIpField"><label>Printer IP address</label><input id="pIp" placeholder="192.168.1.50" oninput="settingsData.printer_ip = this.value.trim()"></div>
+        <div class="printer-field" id="pPortField"><label>Port</label><input id="pPort" type="number" placeholder="9100" oninput="settingsData.printer_port = parseInt(this.value) || 9100"></div>
+        <div class="printer-field"><label>Paper width (mm)</label><input id="pWidthMm" type="number" placeholder="72" oninput="settingsData.printer_width_mm = parseFloat(this.value) || 72"></div>
+        <div class="printer-field"><label>Print width (dots)</label><input id="pWidthPx" type="number" placeholder="576" oninput="settingsData.printer_width_px = parseInt(this.value) || 576"></div>
+        <div class="printer-field"><label>Expected max length (mm)</label><input id="pMaxMm" type="number" placeholder="420" oninput="settingsData.printer_expected_max_mm = parseFloat(this.value) || 420"></div>
+      </div>
+      <div class="printer-field printer-name-field" id="pNameField">
+        <label>Windows printer name</label>
+        <input id="pName" placeholder="kitchen" oninput="settingsData.printer_name = this.value.trim(); highlightPrinterPick()">
+      </div>
+      <div class="printer-actions">
+        <button class="btn-test-print" onclick="testPrinter()">🖨️ Test Print</button>
+        <span class="printer-status" id="printerTestStatus"></span>
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <h3>Report Printer (A4)</h3>
+      <p class="sp-note">Used for the Items Sold and Orders Sold reports (Reports page). Assign it via Scan above, or type its name here.</p>
+      <div class="printer-field printer-name-field">
+        <label>Printer name</label>
+        <input id="pA4Name" placeholder="e.g. Office HP LaserJet" oninput="settingsData.a4_printer_name = this.value.trim(); highlightPrinterPick()">
       </div>
     </div>
 
@@ -557,8 +622,8 @@ async function printReceipt() {
     const data = await res.json();
     if (data.ok) {
       clearOrderForm();
-      status.className = 'status';
-      status.textContent = '✅ Receipt printed!';
+      status.className = data.warning ? 'status err' : 'status';
+      status.textContent = data.warning ? '✅ Printed — ⚠ ' + data.warning : '✅ Receipt printed!';
     } else {
       status.className = 'status err';
       status.textContent = '⚠ ' + (data.error || 'Print failed');
@@ -830,9 +895,98 @@ async function loadSettingsData() {
   renderDict();
   renderPrefs();
   renderCombos([]);
+  renderPrinterFields();
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
+}
+
+function renderPrinterFields() {
+  const mode = settingsData.printer_mode || 'windows_name';
+  document.getElementById('pMode').value    = mode;
+  document.getElementById('pName').value    = settingsData.printer_name || '';
+  document.getElementById('pA4Name').value  = settingsData.a4_printer_name || '';
+  document.getElementById('pIp').value      = settingsData.printer_ip || '';
+  document.getElementById('pPort').value    = settingsData.printer_port || 9100;
+  document.getElementById('pWidthMm').value = settingsData.printer_width_mm || 72;
+  document.getElementById('pWidthPx').value = settingsData.printer_width_px || 576;
+  document.getElementById('pMaxMm').value   = settingsData.printer_expected_max_mm || 420;
+  document.getElementById('pNameField').style.display = mode === 'windows_name' ? '' : 'none';
+  document.getElementById('pIpField').style.display   = mode === 'network_ip'   ? '' : 'none';
+  document.getElementById('pPortField').style.display = mode === 'network_ip'   ? '' : 'none';
+  highlightPrinterPick();
+}
+
+async function scanPrinters() {
+  const btn     = document.querySelector('.btn-scan-printers');
+  const listEl  = document.getElementById('printerPickList');
+  const prevLbl = btn.textContent;
+  btn.disabled  = true;
+  btn.textContent = 'Scanning…';
+  listEl.innerHTML = '';
+  try {
+    const res  = await fetch('/printer/list');
+    const data = await res.json();
+    if (!data.ok) {
+      listEl.innerHTML = `<div class="printer-pick-empty">⚠ ${escHtml(data.error || 'Could not list printers')}</div>`;
+      return;
+    }
+    if (!data.printers.length) {
+      listEl.innerHTML = '<div class="printer-pick-empty">No printers found paired to this PC.</div>';
+      return;
+    }
+    listEl.innerHTML = data.printers.map(name => `
+      <div class="printer-pick-item" data-name="${escHtml(name)}">
+        <span class="ppi-name">${escHtml(name)}</span>
+        <div class="ppi-roles">
+          <button type="button" class="role-btn role-receipt" data-role="receipt">Receipt</button>
+          <button type="button" class="role-btn role-a4" data-role="a4">A4 Report</button>
+        </div>
+      </div>`).join('');
+    listEl.querySelectorAll('.role-btn').forEach(b => {
+      b.addEventListener('click', () => assignPrinterRole(b.closest('.printer-pick-item').dataset.name, b.dataset.role));
+    });
+    highlightPrinterPick();
+  } catch (e) {
+    listEl.innerHTML = `<div class="printer-pick-empty">⚠ ${escHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLbl;
+  }
+}
+
+function assignPrinterRole(name, role) {
+  if (role === 'receipt') {
+    settingsData.printer_mode = 'windows_name';
+    settingsData.printer_name = name;
+  } else {
+    settingsData.a4_printer_name = name;
+  }
+  renderPrinterFields();
+}
+
+function highlightPrinterPick() {
+  const mode = settingsData.printer_mode || 'windows_name';
+  document.querySelectorAll('.printer-pick-item').forEach(el => {
+    const name = el.dataset.name;
+    const rBtn = el.querySelector('.role-receipt');
+    const aBtn = el.querySelector('.role-a4');
+    if (rBtn) rBtn.classList.toggle('active', mode === 'windows_name' && name === (settingsData.printer_name || ''));
+    if (aBtn) aBtn.classList.toggle('active', name === (settingsData.a4_printer_name || ''));
+  });
+}
+
+async function testPrinter() {
+  const statusEl = document.getElementById('printerTestStatus');
+  statusEl.textContent = 'Sending test print…';
+  try {
+    await fetch('/settings/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settingsData) });
+    const res  = await fetch('/printer/test', { method: 'POST' });
+    const data = await res.json();
+    statusEl.textContent = data.ok ? '✅ Test print sent!' : '⚠ ' + (data.error || 'Test print failed');
+  } catch (e) {
+    statusEl.textContent = '⚠ ' + e.message;
+  }
 }
 
 function selectBranch(el) {
