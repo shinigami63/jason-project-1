@@ -131,7 +131,7 @@ def _shape_arabic(chunk, weight, size):
     return buf.glyph_infos, buf.glyph_positions, width
 
 
-def _draw_arabic_run(img, chunk, weight, size, x, baseline_y, fill):
+def _draw_arabic_run(img, chunk, weight, size, x, baseline_y, fill, tracking=0):
     infos, positions, _ = _shape_arabic(chunk, weight, size)
     face = _ft_face(weight, size)
     pen_x = x
@@ -144,7 +144,7 @@ def _draw_arabic_run(img, chunk, weight, size, x, baseline_y, fill):
             gx = round(pen_x + pos.x_offset / 64 + glyph.bitmap_left)
             gy = round(baseline_y - pos.y_offset / 64 - glyph.bitmap_top)
             img.paste(Image.new('RGB', mask.size, fill), (gx, gy), mask)
-        pen_x += pos.x_advance / 64
+        pen_x += pos.x_advance / 64 + tracking
         baseline_y -= pos.y_advance / 64
     return pen_x
 
@@ -157,24 +157,26 @@ class _Line:
     strings a receipt actually contains (verified against real
     browser-rendered ground truth for both pure-Arabic and mixed lines)."""
 
-    def __init__(self, draw, text, weight, size):
+    def __init__(self, draw, text, weight, size, tracking=0):
         self.draw = draw
         self.weight = weight
         self.size = size
+        self.tracking = tracking  # CSS letter-spacing, in canvas px
         self.runs = _split_runs(text)
-        font = _font(weight, size)
-        self.ascent, self.descent = font.getmetrics()
-        self._pil_font = font
+        self._pil_font = _font(weight, size)
+        # Line box from the font's own hhea metrics, scaled unrounded --
+        # this is what a browser does for `line-height:normal`, and it's
+        # what the original receipt's line spacing was built on. Pillow's
+        # getmetrics() rounds ascent and descent up separately instead,
+        # which inflates every line by ~3% and compounds down the receipt.
+        face = _ft_face(weight, size)
+        upem = face.units_per_EM
+        self.ascent = face.ascender / upem * size
+        self.descent = -face.descender / upem * size
+        self.line_h = round(self.ascent + self.descent)
 
     def width(self):
-        total = 0
-        for is_ar, chunk in self.runs:
-            if is_ar:
-                _, _, w = _shape_arabic(chunk, self.weight, self.size)
-                total += w
-            else:
-                total += self.draw.textlength(chunk, font=self._pil_font)
-        return total
+        return sum(self._run_width(is_ar, chunk) for is_ar, chunk in self.runs)
 
     def draw_right_aligned(self, img, right_x, top_y, fill=BLACK):
         """Draws with the line's right edge at right_x and its top at
@@ -183,24 +185,40 @@ class _Line:
         baseline_y = top_y + self.ascent
         x = right_x
         for is_ar, chunk in self.runs:
-            w = (self._shape_width(chunk) if is_ar else self.draw.textlength(chunk, font=self._pil_font))
-            x -= w
+            x -= self._run_width(is_ar, chunk)
             if is_ar:
-                _draw_arabic_run(img, chunk, self.weight, self.size, x, baseline_y, fill)
+                _draw_arabic_run(img, chunk, self.weight, self.size, x, baseline_y, fill,
+                                  tracking=self.tracking)
+            elif self.tracking:
+                cx = x
+                for ch in chunk:
+                    self.draw.text((cx, baseline_y), ch, font=self._pil_font, fill=fill, anchor='ls')
+                    cx += self.draw.textlength(ch, font=self._pil_font) + self.tracking
             else:
                 self.draw.text((x, baseline_y), chunk, font=self._pil_font, fill=fill, anchor='ls')
-        return x, top_y + self.ascent + self.descent
+        return x, top_y + self.line_h
 
-    def _shape_width(self, chunk):
-        _, _, w = _shape_arabic(chunk, self.weight, self.size)
-        return w
+    def _run_width(self, is_ar, chunk):
+        if is_ar:
+            _, _, w = _shape_arabic(chunk, self.weight, self.size)
+            # Tracking lands after every glyph, and shaping can merge
+            # characters into fewer glyphs (ligatures), so count glyphs.
+            if self.tracking:
+                infos, _, _ = _shape_arabic(chunk, self.weight, self.size)
+                w += self.tracking * len(infos)
+            return w
+        return self.draw.textlength(chunk, font=self._pil_font) + self.tracking * len(chunk)
 
 
 class ReceiptCanvas:
     def __init__(self, width_px, max_height_px, dpmm):
         self.w = width_px
         self.dpmm = dpmm
-        self.pad = self.mm(4)
+        self.pad = self.mm(4)          # .r{padding:4mm}
+        # Extra inset applied to whatever is nested one level deeper than the
+        # receipt body -- i.e. the bag frame's own border, while its items are
+        # being drawn. 0 at the top level.
+        self.inset = 0
         self.img = Image.new('RGB', (width_px, max_height_px), WHITE)
         self.d = ImageDraw.Draw(self.img)
         self.y = self.mm(4)
@@ -211,53 +229,72 @@ class ReceiptCanvas:
     def advance(self, dy):
         self.y += dy
 
+    # ── horizontal geometry ─────────────────────────────────────────────
+    # An item box spans the full content width, but its *contents* (qty
+    # badge, name, notes) sit inside its own 2mm padding -- .item{padding:
+    # 2.5mm 2mm} -- so they're inset 2mm further than the bars and rules.
+    def box_left(self):
+        return self.pad + self.inset
+
+    def box_right(self):
+        return self.w - self.pad - self.inset
+
+    def item_left(self):
+        return self.box_left() + self.mm(2)
+
+    def item_right(self):
+        return self.box_right() - self.mm(2)
+
     # ── primitives ──────────────────────────────────────────────────────
     def center_text(self, text, weight, size, gap_after=0, fill=BLACK, spacing=0):
-        if spacing:
-            self._center_spaced(text, _font(weight, size), spacing, fill)
-        else:
-            line = _Line(self.d, text, weight, size)
-            right_x = self.w / 2 + line.width() / 2
-            _, self.y = line.draw_right_aligned(self.img, right_x, self.y, fill)
+        line = _Line(self.d, text, weight, size, tracking=spacing)
+        right_x = self.w / 2 + line.width() / 2
+        _, self.y = line.draw_right_aligned(self.img, right_x, self.y, fill)
         self.y += gap_after
 
-    def _center_spaced(self, text, font, spacing, fill):
-        widths = [self.d.textlength(ch, font=font) for ch in text]
-        total = sum(widths) + spacing * (len(text) - 1)
-        x = (self.w - total) / 2
-        ascent, descent = font.getmetrics()
-        for ch, wch in zip(text, widths):
-            self.d.text((x, self.y), ch, font=font, fill=fill, anchor='la')
-            x += wch + spacing
-        self.y += ascent + descent
-
+    # Rule metrics below are measured off the original CSS borders rendered
+    # in a real browser at this canvas's density: a 2px dashed border comes
+    # out 4px thick with 13px dashes and 8px gaps, a 1px dashed border 2px
+    # thick with 6px dashes and 4px gaps, and a 1px dotted border as 2px
+    # dots on a 4px pitch.
     def dashed_line(self, gap_before=0, gap_after=0, dash=None, gap=None, width=None, fill=BLACK):
         self.y += gap_before
-        width = width or max(1, self.mm(0.5))
-        dash = dash or self.mm(1.6)
-        gap = gap or self.mm(1)
-        x, x2 = self.pad, self.w - self.pad
+        width = width or self.px(2)
+        dash = dash or self.px(6)
+        gap = gap or self.px(3.75)
+        x, x2 = self.box_left(), self.box_right()
         while x < x2:
             self.d.line([(x, self.y), (min(x + dash, x2), self.y)], fill=fill, width=width)
             x += dash + gap
         self.y += width + gap_after
 
-    def dotted_line(self, gap_before=0, gap_after=0, r=None, gap=None, fill=BLACK):
+    def thin_dashed_line(self, gap_before=0, gap_after=0, fill=BLACK):
+        self.dashed_line(gap_before=gap_before, gap_after=gap_after, fill=fill,
+                          width=self.px(1), dash=self.px(3), gap=self.px(2))
+
+    def dotted_line(self, gap_before=0, gap_after=0, dot=None, gap=None, width=None, fill=BLACK):
         self.y += gap_before
-        r = r or max(1, self.mm(0.35))
-        gap = gap or self.mm(1.4)
-        x, x2 = self.pad, self.w - self.pad
+        width = width or self.px(1)
+        dot = dot or self.px(1)
+        gap = gap or self.px(1)
+        x, x2 = self.box_left(), self.box_right()
         while x < x2:
-            self.d.ellipse([x - r, self.y - r, x + r, self.y + r], fill=fill)
-            x += gap
-        self.y += r + gap_after
+            self.d.line([(x, self.y), (min(x + dot - 1, x2), self.y)], fill=fill, width=width)
+            x += dot + gap
+        self.y += width + gap_after
+
+    def px(self, css_px):
+        """A CSS px from the original stylesheet, in canvas pixels. CSS
+        resolves px against a fixed 96dpi reference; this canvas is
+        normally 203.2dpi (8 dots/mm)."""
+        return max(1, round(css_px * self.dpmm * 25.4 / 96))
 
     def black_bar(self, text, size=26, weight=700, pad=None, gap_before=0, gap_after=0):
         self.y += gap_before
         pad = self.mm(1.5) if pad is None else pad
         line = _Line(self.d, text, weight, size)
-        bar_h = (line.ascent + line.descent) + 2 * pad
-        self.d.rectangle([self.pad, self.y, self.w - self.pad, self.y + bar_h], fill=BLACK)
+        bar_h = line.line_h + 2 * pad
+        self.d.rectangle([self.box_left(), self.y, self.box_right(), self.y + bar_h], fill=BLACK)
         right_x = self.w / 2 + line.width() / 2
         line.draw_right_aligned(self.img, right_x, self.y + pad, WHITE)
         self.y += bar_h + gap_after
@@ -265,8 +302,8 @@ class ReceiptCanvas:
     def info_row(self, label, value, label_size=23, value_size=28):
         lline = _Line(self.d, label, 400, label_size)
         vline = _Line(self.d, str(value), 700, value_size)
-        _, y_after_l = lline.draw_right_aligned(self.img, self.w - self.pad, self.y, BLACK)
-        left_x, y_after_v = vline.draw_right_aligned(self.img, self.pad + vline.width(), self.y, BLACK)
+        _, y_after_l = lline.draw_right_aligned(self.img, self.box_right(), self.y, BLACK)
+        left_x, y_after_v = vline.draw_right_aligned(self.img, self.box_left() + vline.width(), self.y, BLACK)
         self.y += max(y_after_l, y_after_v) - self.y + self.mm(1.5)
 
     def wrapped_rtl(self, text, weight, size, right_x, max_width, fill=BLACK):
@@ -285,36 +322,40 @@ class ReceiptCanvas:
         for text_line in lines:
             line = _Line(self.d, text_line, weight, size)
             if line_h is None:
-                line_h = line.ascent + line.descent
+                line_h = line.line_h
             line.draw_right_aligned(self.img, right_x, self.y, fill)
             self.y += line_h
         return len(lines)
 
     def qty_badge(self, qty, name, qty_size=34, name_size=34):
-        qf = _font(900, qty_size)
+        # .qty{min-width:8mm;padding:0 2mm;border-radius:2px} sitting in a
+        # flex row with the name, so the badge is as tall as the row's line
+        # box and the two are 2mm apart (.row{gap:2mm}).
+        qf, nf = _font(900, qty_size), _font(700, name_size)
         qty_str = str(qty)
         qb = self.d.textbbox((0, 0), qty_str, font=qf)
         badge_w = max(self.mm(8), (qb[2] - qb[0]) + 2 * self.mm(2))
-        badge_h = (qb[3] - qb[1]) + self.mm(2)
+        badge_h = _Line(self.d, '', 700, name_size).line_h
         top = self.y
-        left = self.w - self.pad - badge_w
-        self.d.rounded_rectangle([left, top, left + badge_w, top + badge_h], radius=self.mm(0.6), fill=BLACK)
+        left = self.item_right() - badge_w
+        self.d.rounded_rectangle([left, top, left + badge_w, top + badge_h],
+                                  radius=self.px(2), fill=BLACK)
         self.d.text((left + badge_w / 2, top + badge_h / 2), qty_str, font=qf, fill=WHITE, anchor='mm')
 
-        gap = self.mm(2)
-        right_x = left - gap
-        max_w = right_x - self.pad
+        right_x = left - self.mm(2)
+        max_w = right_x - self.item_left()
         self.wrapped_rtl(name, 700, name_size, right_x, max_w)
         self.y = max(self.y, top + badge_h)
 
     def note(self, text, size=30):
-        indent = self.mm(6)
-        right_x = self.w - self.pad - indent
-        max_w = right_x - self.pad
+        # .note{margin-right:6mm;border-right:3px;padding-right:1.5mm}
+        note_right = self.item_right() - self.mm(6)
+        bar_w = self.px(3)
+        right_x = note_right - bar_w - self.mm(1.5)
+        max_w = right_x - self.item_left()
         top = self.y
         self.wrapped_rtl(text, 700, size, right_x, max_w)
-        self.d.line([(right_x + self.mm(1.5), top), (right_x + self.mm(1.5), self.y)],
-                    fill=BLACK, width=max(1, self.mm(0.5)))
+        self.d.rectangle([note_right - bar_w, top, note_right, self.y], fill=BLACK)
 
     def render_item(self, item):
         self.y += self.mm(2.5)
@@ -327,24 +368,30 @@ class ReceiptCanvas:
         self.y += self.mm(2.5)
 
     def bag_frame(self, title, bag_items):
+        # .bag-frame{border:2.5px solid;border-radius:3px;margin:3mm 0 2mm},
+        # with the title bar and the items sitting inside that border -- so
+        # while its items are drawn, everything is inset by the border.
         self.y += self.mm(3)
-        left, right = self.pad, self.w - self.pad
-        border_w = max(2, self.mm(0.7))
+        left, right = self.box_left(), self.box_right()
+        border_w = self.px(2)   # Chrome computes the declared 2.5px down to 2px
         top = self.y
 
-        line = _Line(self.d, title, 900, 32)
-        title_h = (line.ascent + line.descent) + 2 * self.mm(2.5)
-        self.d.rectangle([left, top, right, top + title_h], fill=BLACK)
+        line = _Line(self.d, title, 900, 32, tracking=self.px(2))
+        title_h = line.line_h + 2 * self.mm(2.5)
+        self.d.rectangle([left + border_w, top + border_w, right - border_w, top + title_h], fill=BLACK)
         right_x = (left + right) / 2 + line.width() / 2
-        line.draw_right_aligned(self.img, right_x, top + self.mm(2.5), WHITE)
+        line.draw_right_aligned(self.img, right_x, top + border_w + self.mm(2.5), WHITE)
         self.y = top + title_h
 
+        self.inset += border_w
         for i, item in enumerate(bag_items):
             self.render_item(item)
             if i < len(bag_items) - 1:
                 self.dotted_line(fill=GRAY)
+        self.inset -= border_w
 
-        self.d.rectangle([left, top, right, self.y], outline=BLACK, width=border_w)
+        self.d.rounded_rectangle([left, top, right, self.y], radius=self.px(3),
+                                  outline=BLACK, width=border_w)
         self.y += self.mm(2)
 
     # ── finish ──────────────────────────────────────────────────────────
@@ -399,7 +446,7 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     c.advance(c.mm(1))
     c.center_text(f'فرع {ctx["branch"]}', 600, 25)
     c.advance(c.mm(2))
-    c.center_text('TOTERS', 900, 38, spacing=c.mm(1.1))
+    c.center_text('TOTERS', 900, 38, spacing=c.px(3))
     if ctx.get('scheduled'):
         c.advance(c.mm(1.5))
         c.black_bar('مجدول', size=23, weight=700, pad=c.mm(1))
@@ -411,13 +458,13 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     c.info_row('الزبون', ctx['customer'])
     c.info_row(ctx['time_lbl'], ctx['prepare_by'])
     c.info_row('رقم الطلب', f'#{ctx["order_num"]}')
-    c.dashed_line(gap_before=c.mm(1.5))
+    # .info's rule is a 1px dashed border, thinner than .hd's/.ft's 2px ones
+    c.thin_dashed_line(gap_before=c.mm(1.5))
 
     c.black_bar('الطلبية', size=25, weight=700, gap_before=c.mm(2))
 
     items = ctx['items']
     idx = 0
-    is_first = True
     while idx < len(items):
         item = items[idx]
         if item.get('is_bag_header'):
@@ -426,11 +473,13 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
             idx += 1 + bag_size
             c.bag_frame(item['arabic_name'], bag_items)
         else:
-            if not is_first:
-                c.dotted_line()
             c.render_item(item)
+            # .item's dotted bottom border, on every item including the
+            # last: `.item:last-child{border-bottom:none}` never matches at
+            # this level, since the footer div follows the items. (It does
+            # match inside a bag frame, which bag_frame() handles.)
+            c.dotted_line()
             idx += 1
-        is_first = False
 
     c.dashed_line(gap_before=c.mm(4), gap_after=c.mm(3))
     c.center_text('شكراً!', 700, 28)
