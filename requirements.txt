@@ -1,6 +1,6 @@
 flask
 pillow
 python-escpos
-arabic-reshaper
-python-bidi
+uharfbuzz
+freetype-py
 pywin32; sys_platform == "win32"
