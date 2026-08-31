@@ -32,9 +32,11 @@ jobs:
       # fine and then fails on the till instead. Fail the build here instead.
       - name: Verify runtime resources are bundled
         run: |
-          $toc = Get-Content build/KebzetZamen/PKG-00.toc -Raw
+          $toc = 'build/KebzetZamen/PKG-00.toc'
+          if (-not (Test-Path $toc)) { throw "build manifest not found: $toc" }
+          $text = Get-Content $toc -Raw
           foreach ($f in @('ui.html', 'extract.py', 'Cairo.ttf', 'capabilities.json')) {
-            if ($toc -notmatch [regex]::Escape($f)) { throw "not bundled into the exe: $f" }
+            if ($text -notmatch [regex]::Escape($f)) { throw "not bundled into the exe: $f" }
             Write-Host "bundled: $f"
           }
 
