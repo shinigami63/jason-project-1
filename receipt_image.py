@@ -262,7 +262,7 @@ class ReceiptCanvas:
         line.draw_right_aligned(self.img, right_x, self.y + pad, WHITE)
         self.y += bar_h + gap_after
 
-    def info_row(self, label, value, label_size=19, value_size=23):
+    def info_row(self, label, value, label_size=23, value_size=28):
         lline = _Line(self.d, label, 400, label_size)
         vline = _Line(self.d, str(value), 700, value_size)
         _, y_after_l = lline.draw_right_aligned(self.img, self.w - self.pad, self.y, BLACK)
@@ -290,7 +290,7 @@ class ReceiptCanvas:
             self.y += line_h
         return len(lines)
 
-    def qty_badge(self, qty, name, qty_size=28, name_size=28):
+    def qty_badge(self, qty, name, qty_size=34, name_size=34):
         qf = _font(900, qty_size)
         qty_str = str(qty)
         qb = self.d.textbbox((0, 0), qty_str, font=qf)
@@ -307,7 +307,7 @@ class ReceiptCanvas:
         self.wrapped_rtl(name, 700, name_size, right_x, max_w)
         self.y = max(self.y, top + badge_h)
 
-    def note(self, text, size=24):
+    def note(self, text, size=30):
         indent = self.mm(6)
         right_x = self.w - self.pad - indent
         max_w = right_x - self.pad
@@ -330,7 +330,7 @@ class ReceiptCanvas:
         border_w = max(2, self.mm(0.7))
         top = self.y
 
-        line = _Line(self.d, title, 900, 26)
+        line = _Line(self.d, title, 900, 32)
         title_h = (line.ascent + line.descent) + 2 * self.mm(2.5)
         self.d.rectangle([left, top, right, top + title_h], fill=BLACK)
         right_x = (left + right) / 2 + line.width() / 2
@@ -377,28 +377,34 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     max length (in mm) if you want to warn that an order ran unusually long.
 
     Every size below is the original browser/CSS receipt's px value (the
-    one the operator is used to) times 28/16 -- the scale that keeps the
-    qty badge and item name at the 28px this renderer already used, so
-    everything else (header 20px, branch 12px, TOTERS 18px, sched badge
-    11px, day 20px, info label/value 11/13px, black bars 12px, note
-    14px, bag title 15px, footer 13px) stays in the same proportion to
-    them as the original design, instead of being eyeballed per element.
+    one the operator is used to -- header 20px, branch 12px, TOTERS 18px,
+    sched badge 11px, day 20px, info label/value 11/13px, black bars
+    12px, qty/item name 16px, note 14px, bag title 15px, footer 13px)
+    times 203.2/96: CSS renders those px at a fixed 96dpi reference
+    regardless of screen, and this canvas is 8 dots/mm (203.2dpi) at the
+    default width_px/width_mm, so that ratio is what actually reproduces
+    the original's physical size on the printed paper -- verified by
+    rendering the original CSS in a real browser at matching dpi and
+    reading back each element's computed font-size. (A first pass here
+    scaled everything by 28/16, anchored on a qty-badge size that had
+    itself only been eyeballed -- right proportions, wrong absolute
+    scale, so everything came out a uniform ~17% too small.)
     """
     dpmm = width_px / width_mm
     hard_h = round(ABSOLUTE_MAX_MM * dpmm)
     c = ReceiptCanvas(width_px, hard_h, dpmm)
 
-    c.center_text('كبة زمان', 900, 35)
+    c.center_text('كبة زمان', 900, 42)
     c.advance(c.mm(1))
-    c.center_text(f'فرع {ctx["branch"]}', 600, 21)
+    c.center_text(f'فرع {ctx["branch"]}', 600, 25)
     c.advance(c.mm(2))
-    c.center_text('TOTERS', 900, 32, spacing=c.mm(1.1))
+    c.center_text('TOTERS', 900, 38, spacing=c.mm(1.1))
     if ctx.get('scheduled'):
         c.advance(c.mm(1.5))
-        c.black_bar('مجدول', size=19, weight=700, pad=c.mm(1))
+        c.black_bar('مجدول', size=23, weight=700, pad=c.mm(1))
     if ctx.get('day_ar'):
         c.advance(c.mm(2))
-        c.center_text(ctx['day_ar'], 900, 35)
+        c.center_text(ctx['day_ar'], 900, 42)
     c.dashed_line(gap_before=c.mm(3), gap_after=c.mm(3))
 
     c.info_row('الزبون', ctx['customer'])
@@ -406,7 +412,7 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     c.info_row('رقم الطلب', f'#{ctx["order_num"]}')
     c.dashed_line(gap_before=c.mm(1.5))
 
-    c.black_bar('الطلبية', size=21, weight=700, gap_before=c.mm(2), gap_after=c.mm(2))
+    c.black_bar('الطلبية', size=25, weight=700, gap_before=c.mm(2), gap_after=c.mm(2))
 
     items = ctx['items']
     idx = 0
@@ -426,6 +432,6 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
         is_first = False
 
     c.dashed_line(gap_before=c.mm(4), gap_after=c.mm(3))
-    c.center_text('شكراً!', 700, 23)
+    c.center_text('شكراً!', 700, 28)
 
     return c.finish()
