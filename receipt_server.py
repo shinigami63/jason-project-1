@@ -10,7 +10,7 @@ from flask import Flask, request, jsonify
 import json
 
 from receipt_image import render_receipt_image
-from printer_client import print_receipt_image as send_to_printer
+from printer_client import print_receipt_image as send_to_printer, list_windows_printers
 
 app = Flask(__name__)
 
@@ -715,6 +715,13 @@ def receipt():
         if warning:
             resp['warning'] = warning
         return jsonify(resp)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/printer/list', methods=['GET'])
+def printer_list():
+    try:
+        return jsonify({'ok': True, 'printers': list_windows_printers()})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 

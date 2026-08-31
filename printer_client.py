@@ -18,6 +18,16 @@ Two connection modes are supported:
 """
 
 
+def list_windows_printers():
+    """Names of printers currently installed in Windows (Devices &
+    Printers), for a Settings picker -- lets the operator choose from
+    what's actually paired instead of typing a name by hand. Windows-only;
+    raises on any other platform so the caller can surface that clearly."""
+    import win32print
+    flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+    return sorted(p[2] for p in win32print.EnumPrinters(flags))
+
+
 def _connect(mode, printer_name, ip, port, timeout):
     if mode == 'windows_name':
         if not printer_name:

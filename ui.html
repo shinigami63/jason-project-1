@@ -183,6 +183,17 @@
   .printer-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
   .printer-field input, .printer-field select { width: 100%; padding: 11px; border: 1.5px solid var(--border); border-radius: 7px; font-size: 15px; font-family: inherit; background: #fff; }
   .printer-field input:focus, .printer-field select:focus { outline: none; border-color: var(--red); }
+  .printer-name-field { margin-bottom: 12px; }
+  .printer-pick-row { display: flex; gap: 8px; }
+  .printer-pick-row input { flex: 1; }
+  .btn-scan-printers { background: #111; color: #fff; border: none; border-radius: 7px; padding: 0 16px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .btn-scan-printers:hover { background: #333; }
+  .btn-scan-printers:disabled { opacity: .6; cursor: default; }
+  .printer-pick-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+  .printer-pick-item { padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 7px; cursor: pointer; font-size: 14px; }
+  .printer-pick-item:hover { border-color: #999; }
+  .printer-pick-item.selected { border-color: var(--red); background: #fff8f8; color: var(--red); font-weight: 700; }
+  .printer-pick-empty { font-size: 13px; color: var(--muted); padding: 4px 2px; }
   .printer-actions { display: flex; align-items: center; gap: 10px; }
   .btn-test-print { background: #111; color: #fff; border: none; border-radius: 7px; padding: 11px 18px; font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-test-print:hover { background: #333; }
@@ -316,12 +327,19 @@
             <option value="network_ip">Network (IP address)</option>
           </select>
         </div>
-        <div class="printer-field" id="pNameField"><label>Windows printer name</label><input id="pName" placeholder="kitchen" oninput="settingsData.printer_name = this.value.trim()"></div>
         <div class="printer-field" id="pIpField"><label>Printer IP address</label><input id="pIp" placeholder="192.168.1.50" oninput="settingsData.printer_ip = this.value.trim()"></div>
         <div class="printer-field" id="pPortField"><label>Port</label><input id="pPort" type="number" placeholder="9100" oninput="settingsData.printer_port = parseInt(this.value) || 9100"></div>
         <div class="printer-field"><label>Paper width (mm)</label><input id="pWidthMm" type="number" placeholder="72" oninput="settingsData.printer_width_mm = parseFloat(this.value) || 72"></div>
         <div class="printer-field"><label>Print width (dots)</label><input id="pWidthPx" type="number" placeholder="576" oninput="settingsData.printer_width_px = parseInt(this.value) || 576"></div>
         <div class="printer-field"><label>Expected max length (mm)</label><input id="pMaxMm" type="number" placeholder="420" oninput="settingsData.printer_expected_max_mm = parseFloat(this.value) || 420"></div>
+      </div>
+      <div class="printer-field printer-name-field" id="pNameField">
+        <label>Windows printer name</label>
+        <div class="printer-pick-row">
+          <input id="pName" placeholder="kitchen" oninput="settingsData.printer_name = this.value.trim(); highlightPrinterPick()">
+          <button type="button" class="btn-scan-printers" onclick="scanPrinters()">🔄 Scan</button>
+        </div>
+        <div class="printer-pick-list" id="printerPickList"></div>
       </div>
       <div class="printer-actions">
         <button class="btn-test-print" onclick="testPrinter()">🖨️ Test Print</button>
@@ -879,6 +897,52 @@ function renderPrinterFields() {
   document.getElementById('pNameField').style.display = mode === 'windows_name' ? '' : 'none';
   document.getElementById('pIpField').style.display   = mode === 'network_ip'   ? '' : 'none';
   document.getElementById('pPortField').style.display = mode === 'network_ip'   ? '' : 'none';
+  highlightPrinterPick();
+}
+
+async function scanPrinters() {
+  const btn     = document.querySelector('.btn-scan-printers');
+  const listEl  = document.getElementById('printerPickList');
+  const prevLbl = btn.textContent;
+  btn.disabled  = true;
+  btn.textContent = 'Scanning…';
+  listEl.innerHTML = '';
+  try {
+    const res  = await fetch('/printer/list');
+    const data = await res.json();
+    if (!data.ok) {
+      listEl.innerHTML = `<div class="printer-pick-empty">⚠ ${escHtml(data.error || 'Could not list printers')}</div>`;
+      return;
+    }
+    if (!data.printers.length) {
+      listEl.innerHTML = '<div class="printer-pick-empty">No printers found paired to this PC.</div>';
+      return;
+    }
+    listEl.innerHTML = data.printers.map(name =>
+      `<div class="printer-pick-item" data-name="${escHtml(name)}">${escHtml(name)}</div>`
+    ).join('');
+    listEl.querySelectorAll('.printer-pick-item').forEach(el => {
+      el.addEventListener('click', () => pickPrinter(el.dataset.name));
+    });
+    highlightPrinterPick();
+  } catch (e) {
+    listEl.innerHTML = `<div class="printer-pick-empty">⚠ ${escHtml(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLbl;
+  }
+}
+
+function pickPrinter(name) {
+  settingsData.printer_name = name;
+  document.getElementById('pName').value = name;
+  highlightPrinterPick();
+}
+
+function highlightPrinterPick() {
+  document.querySelectorAll('.printer-pick-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.name === (settingsData.printer_name || ''));
+  });
 }
 
 async function testPrinter() {
