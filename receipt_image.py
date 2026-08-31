@@ -335,13 +335,12 @@ class ReceiptCanvas:
         self.d.rectangle([left, top, right, top + title_h], fill=BLACK)
         right_x = (left + right) / 2 + line.width() / 2
         line.draw_right_aligned(self.img, right_x, top + self.mm(2.5), WHITE)
-        self.y = top + title_h + self.mm(1.5)
+        self.y = top + title_h
 
         for i, item in enumerate(bag_items):
             self.render_item(item)
             if i < len(bag_items) - 1:
-                self.dotted_line(gap_before=self.mm(1.2), gap_after=self.mm(1.2), fill=GRAY)
-        self.y += self.mm(1.5)
+                self.dotted_line(gap_after=self.mm(1), fill=GRAY)
 
         self.d.rectangle([left, top, right, self.y], outline=BLACK, width=border_w)
         self.y += self.mm(2)
@@ -412,7 +411,7 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     c.info_row('رقم الطلب', f'#{ctx["order_num"]}')
     c.dashed_line(gap_before=c.mm(1.5))
 
-    c.black_bar('الطلبية', size=25, weight=700, gap_before=c.mm(2), gap_after=c.mm(2))
+    c.black_bar('الطلبية', size=25, weight=700, gap_before=c.mm(2))
 
     items = ctx['items']
     idx = 0
@@ -426,7 +425,7 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
             c.bag_frame(item['arabic_name'], bag_items)
         else:
             if not is_first:
-                c.dotted_line(gap_before=c.mm(1.2), gap_after=c.mm(1.2))
+                c.dotted_line(gap_after=c.mm(1))
             c.render_item(item)
             idx += 1
         is_first = False
