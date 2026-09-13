@@ -16,6 +16,7 @@
   "beirut beer light": "بيرة بيروت لايت",
   "biscuits & raha": "بسكوت وراحة",
   "biscuits and raha": "بسكوت وراحة",
+  "biscuits & raha (combo)": "راحة وبسكوت حبتين",
   "borghol aa banadoura": "برغل بالبندورة",
   "cabbage salad": "سلطة ملفوف",
   "carob molasses": "دبس الخروب",
@@ -98,6 +99,7 @@
   "pickles": "كبيس",
   "potatoes with garlic & coriander": "بطاطا بالثوم والكزبرة",
   "pumpkin kebbeh": "كبة لقطين",
+  "pumpkin kebbeh (4 pcs)": "كبة لقطين (4 حبات)",
   "pumpkin kebbeh in a tray": "كبة لقطين بالصينية",
   "raheb eggplant": "بذنجان الراهب",
   "ras asfour": "لحمة رأس عصفور",
@@ -128,5 +130,12 @@
   "vegetables": "جاط خضرة",
   "vine leaves in oil": "ورق عنب بالزيت",
   "water": "مياه",
-  "yogurt": "لبن"
+  "yogurt": "لبن",
+  "monday": "الاثنين",
+  "tuesday": "الثلاثاء",
+  "wednesday": "الأربعاء",
+  "thursday": "الخميس",
+  "friday": "الجمعة",
+  "saturday": "السبت",
+  "sunday": "الأحد"
 }

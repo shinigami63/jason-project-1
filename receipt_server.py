@@ -50,6 +50,9 @@ DEFAULT_DICTIONARY = {
     "beirut beer light": "بيرة بيروت لايت",
     "biscuits & raha": "بسكوت وراحة",
     "biscuits and raha": "بسكوت وراحة",
+    # The two pieces that come inside a combo, printed differently from a
+    # Biscuits & Raha ordered on its own (see extract.py).
+    "biscuits & raha (combo)": "راحة وبسكوت حبتين",
     "borghol aa banadoura": "برغل بالبندورة",
     "cabbage salad": "سلطة ملفوف",
     "carob molasses": "دبس الخروب",
@@ -328,6 +331,27 @@ QTY_LABELS = {
     "medium tray": "صينية وسط",
     "large tray": "صينية كبيرة",
 }
+
+# "2 x Medium Tray" — a portion label ordered more than once (extract.py).
+_QTY_COUNT_RE = re.compile(r'^(\d+)\s*[x×]\s*(.+)$', re.IGNORECASE)
+
+def translate_qty(qty):
+    """Translates a portion-label qty ("Medium Tray" → "صينية وسط"). A count
+    in front of the label moves to the end, where an Arabic line reads it
+    ("2 x Medium Tray" → "صينية وسط ×2") — matching how the Items Sold report
+    already writes repeated labels. Plain counts and weights ("3", "1KG")
+    and already-translated labels pass through untouched."""
+    s = str(qty or '').strip()
+    if not s:
+        return qty
+    label = QTY_LABELS.get(s.lower())
+    if label:
+        return label
+    m = _QTY_COUNT_RE.match(s)
+    if m:
+        count, rest = m.group(1), m.group(2).strip()
+        return f'{QTY_LABELS.get(rest.lower(), rest)} ×{count}'
+    return qty
 
 def load_preferences():
     saved = {}
@@ -611,6 +635,15 @@ def _fmt_count(v):
         return str(whole)
     return f'{v:g}'
 
+def split_label_count(label):
+    """Splits a stored label qty into (label, count). A tray ordered more than
+    once is stored the way it printed ("صينية وسط ×3"), so the report has to
+    add 3 to that label's tally rather than counting the row once."""
+    m = re.match(r'^(.*?)\s*[x×]\s*(\d+)$', label.strip(), re.IGNORECASE)
+    if m and m.group(1):
+        return m.group(1).strip(), int(m.group(2))
+    return label, 1
+
 def _fmt_summed_qty(g):
     parts = []
     if g['count']:
@@ -641,7 +674,8 @@ def items_report(date_from, date_to):
         elif kind == 'weight':
             g['weight'] += val
         else:
-            g['labels'][val] = g['labels'].get(val, 0) + 1
+            label, n = split_label_count(val)
+            g['labels'][label] = g['labels'].get(label, 0) + n
 
     categories = []
     for cat in sorted(groups.keys()):
@@ -675,12 +709,20 @@ def translate_items(items):
     for item in items:
         if item.get('is_bag_header'):
             continue
-        item['add_ons']     = translate_add_ons(item.get('add_ons', []))
-        item['arabic_name'] = translate_word(item['name'])
-        item['qty']         = QTY_LABELS.get(str(item.get('qty', '')).lower().strip(), item.get('qty'))
-        name_key = item['name'].lower().strip()
-        if item.get('category') == 'Combos' and 'biscuit' in name_key and 'raha' in name_key:
-            item['arabic_name'] = 'بسكوت وراحة قطعتين مطبقين'
+        item['add_ons'] = translate_add_ons(item.get('add_ons', []))
+        # An item can carry its own dictionary key when the same menu item
+        # prints differently depending on how it was ordered (Biscuits & Raha
+        # alone vs. inside a combo). A dictionary the user replaced wholesale
+        # may not have that key yet, so fall back to the wording extract.py
+        # already put on the item rather than to the English key.
+        dict_key = item.get('dict_key')
+        if dict_key:
+            item['arabic_name'] = (DICTIONARY.get(dict_key.lower().strip())
+                                    or item.get('arabic_name')
+                                    or translate_word(item['name']))
+        else:
+            item['arabic_name'] = translate_word(item['name'])
+        item['qty'] = translate_qty(item.get('qty'))
     return items
 
 # ── Routes ────────────────────────────────────────────────────────────────────
