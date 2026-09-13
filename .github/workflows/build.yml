@@ -22,38 +22,62 @@ jobs:
         run: |
           pip install flask pyinstaller pywebview pillow python-escpos uharfbuzz freetype-py pywin32
 
+      # --onedir, not --onefile: a single-file exe unpacks a whole Python
+      # runtime into a temp folder on every launch, which is what a dropper
+      # does too, so unsigned onefile builds get flagged by Chrome's download
+      # protection and by Defender's heuristics. A onedir build ships the same
+      # files laid out on disk, which trips far fewer of those, and starts
+      # faster because nothing is unpacked at launch.
       - name: Build EXE
         run: |
-          pyinstaller --onefile --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Cairo.ttf;fonts" --collect-data escpos --name "KebzetZamen" receipt_server.py
+          pyinstaller --onedir --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Cairo.ttf;fonts" --collect-data escpos --name "KebzetZamen" receipt_server.py
 
       # Files the app loads at runtime (the UI, the Arabic font, python-escpos's
       # printer capabilities table) are data, not imports, so PyInstaller only
-      # bundles them if it's told to -- and when one is missed the .exe builds
+      # bundles them if it's told to -- and when one is missed the app builds
       # fine and then fails on the till instead. Fail the build here instead.
+      # Checks the files actually shipped in dist/, wherever PyInstaller put
+      # them (they live under _internal/ from PyInstaller 6 on).
       - name: Verify runtime resources are bundled
         run: |
-          $toc = 'build/KebzetZamen/PKG-00.toc'
-          if (-not (Test-Path $toc)) { throw "build manifest not found: $toc" }
-          $text = Get-Content $toc -Raw
+          $app = 'dist/KebzetZamen'
+          if (-not (Test-Path "$app/KebzetZamen.exe")) { throw "exe not built: $app/KebzetZamen.exe" }
           foreach ($f in @('ui.html', 'extract.py', 'Cairo.ttf', 'capabilities.json')) {
-            if ($text -notmatch [regex]::Escape($f)) { throw "not bundled into the exe: $f" }
-            Write-Host "bundled: $f"
+            $hit = Get-ChildItem -Path $app -Recurse -Filter $f -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $hit) { throw "not bundled into the app folder: $f" }
+            Write-Host "bundled: $($hit.FullName)"
           }
 
-      - name: Upload EXE
+      # One zip holding the KebzetZamen folder, so the release has a single
+      # file to download and unzipping gives you the folder to keep.
+      - name: Zip the app folder
+        run: Compress-Archive -Path dist/KebzetZamen -DestinationPath dist/KebzetZamen-Windows.zip -Force
+
+      - name: Upload app folder
         uses: actions/upload-artifact@v4
         with:
           name: KebzetZamen-Windows
-          path: dist/KebzetZamen.exe
+          path: dist/KebzetZamen
 
-      # Publish the freshly built .exe to a rolling "latest" release so there
+      # Publish the freshly built app to a rolling "latest" release so there
       # is one permanent, login-free download link that always points at the
       # newest build:
-      #   https://github.com/<owner>/<repo>/releases/latest/download/KebzetZamen.exe
+      #   https://github.com/<owner>/<repo>/releases/latest/download/KebzetZamen-Windows.zip
       - name: Publish to "latest" release
         if: github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Latest build
-          files: dist/KebzetZamen.exe
+          files: dist/KebzetZamen-Windows.zip
+
+      # The release keeps assets that a build no longer uploads, so the old
+      # single-file exe would sit there forever and the old download link
+      # would keep handing out a build from before this change. Drop it --
+      # a no-op on every run after the first.
+      - name: Remove the stale single-file exe asset
+        if: github.ref == 'refs/heads/master'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete-asset latest KebzetZamen.exe --yes || echo "no stale KebzetZamen.exe asset to remove"
