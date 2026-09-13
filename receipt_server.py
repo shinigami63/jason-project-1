@@ -34,14 +34,36 @@ def _program_dir():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
+def _default_data_dir():
+    base = (os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
+            or os.path.expanduser('~'))
+    return os.path.join(base, APP_DATA_DIR_NAME)
+
+def _pointer_path():
+    """Records a data folder chosen in Settings. Kept in the default folder
+    rather than in the data folder itself -- the app has to know where to
+    look before it knows where the data is."""
+    return os.path.join(_default_data_dir(), 'data_folder.txt')
+
+def _chosen_data_dir():
+    try:
+        with open(_pointer_path(), encoding='utf-8') as f:
+            chosen = f.read().strip()
+        return chosen or None
+    except OSError:
+        return None
+
 def _data_dir():
+    # An explicit override wins everywhere, including when running from
+    # source -- it is how the tests drive this.
+    env = os.environ.get('KEBZET_DATA_DIR', '').strip()
+    if env:
+        return env
     if not getattr(sys, 'frozen', False):
         # Running from source: stay in the checkout, so development never
         # reads or writes the installed app's real data.
         return _program_dir()
-    base = (os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
-            or os.path.expanduser('~'))
-    return os.path.join(base, APP_DATA_DIR_NAME)
+    return _chosen_data_dir() or _default_data_dir()
 
 DATA_DIR = _data_dir()
 
@@ -363,6 +385,18 @@ def load_dictionary():
         _write_dictionary(d)
     return d
 
+def _apply_custom_dict_setting():
+    """A custom dictionary file chosen in Settings overrides the one in the
+    data folder. Used at startup and again whenever the data folder changes,
+    so switching folders can't silently drop it."""
+    global DICTIONARY_PATH, _using_custom_dict
+    DICTIONARY_PATH = get_data_path('dictionary.json')
+    _using_custom_dict = False
+    custom = SETTINGS.get('custom_dict_path')
+    if custom and os.path.exists(custom):
+        DICTIONARY_PATH = custom
+        _using_custom_dict = True
+
 def _write_dictionary(d):
     with open(DICTIONARY_PATH, 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
@@ -512,12 +546,7 @@ def _write_settings(s):
 
 # ── In-memory state ───────────────────────────────────────────────────────────
 SETTINGS = load_settings()
-if 'custom_dict_path' in SETTINGS:
-    _cp = SETTINGS['custom_dict_path']
-    if _cp and os.path.exists(_cp):
-        DICTIONARY_PATH = _cp
-        _using_custom_dict = True
-
+_apply_custom_dict_setting()
 DICTIONARY = load_dictionary()
 PREFERENCES = load_preferences()
 COMBOS_DATA = load_combos()
@@ -899,7 +928,57 @@ def get_settings():
 # settings.json when the user saves, so it must carry nothing but settings.
 @app.route('/data/location', methods=['GET'])
 def data_location():
-    return jsonify({'path': DATA_DIR, 'migrated': MIGRATED_FILES})
+    return jsonify({'path': DATA_DIR, 'default': _default_data_dir(),
+                    'migrated': MIGRATED_FILES})
+
+@app.route('/data/location/set', methods=['POST'])
+def set_data_location():
+    """Points the app at a different data folder -- e.g. one inside OneDrive,
+    to get the shop's files backed up off the machine. Copies what is there
+    now into the new folder (without overwriting files already in it) and
+    reloads everything from the new location."""
+    global DATA_DIR, DICTIONARY_PATH, PREFERENCES_PATH, COMBOS_PATH, HISTORY_DB_PATH
+    global DICTIONARY, PREFERENCES, COMBOS_DATA, SETTINGS
+    try:
+        new_dir = (request.json.get('path') or '').strip().strip('"')
+        if not new_dir:
+            new_dir = _default_data_dir()
+        new_dir = os.path.abspath(os.path.expandvars(os.path.expanduser(new_dir)))
+        if os.path.abspath(new_dir) == os.path.abspath(DATA_DIR):
+            return jsonify({'ok': True, 'path': DATA_DIR, 'copied': []})
+        if os.path.exists(new_dir) and not os.path.isdir(new_dir):
+            return jsonify({'ok': False, 'error': 'That path is a file, not a folder.'})
+
+        os.makedirs(new_dir, exist_ok=True)
+        copied = []
+        for name in DATA_FILES:
+            src, dst = os.path.join(DATA_DIR, name), os.path.join(new_dir, name)
+            if os.path.exists(dst) or not os.path.exists(src):
+                continue
+            shutil.copy2(src, dst)
+            copied.append(name)
+
+        # Remember the choice before switching, so a crash mid-reload still
+        # comes back up pointed at the folder the files were copied into.
+        os.makedirs(_default_data_dir(), exist_ok=True)
+        with open(_pointer_path(), 'w', encoding='utf-8') as f:
+            f.write('' if os.path.abspath(new_dir) == os.path.abspath(_default_data_dir())
+                    else new_dir)
+
+        DATA_DIR = new_dir
+        PREFERENCES_PATH = get_data_path('preferences.json')
+        COMBOS_PATH = get_data_path('combos.json')
+        HISTORY_DB_PATH = get_data_path('order_history.db')
+        SETTINGS = load_settings()
+        _apply_custom_dict_setting()
+        DICTIONARY = load_dictionary()
+        PREFERENCES = load_preferences()
+        COMBOS_DATA = load_combos()
+        _apply_combos(COMBOS_DATA)
+        init_history_db()
+        return jsonify({'ok': True, 'path': DATA_DIR, 'copied': copied})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
 
 @app.route('/settings/save', methods=['POST'])
 def save_sett():

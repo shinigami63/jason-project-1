@@ -38,7 +38,7 @@ The old copies are left where they are, as a fallback.
 
 ## Where your files are kept
 
-The shop's own files live **outside** the app folder, in:
+The shop's own files live **outside** the app folder, by default in:
 
 ```
 C:\Users\<you>\AppData\Local\KebbetZamen\
@@ -49,18 +49,30 @@ C:\Users\<you>\AppData\Local\KebbetZamen\
 └── order_history.db
 ```
 
-The app shows this path under **Settings → Your Files**. Because nothing of
-yours is inside the program folder, updating or reinstalling the app can't
-disturb it — replace the folder, delete it, move it to another drive, it
-makes no difference.
+The app shows the folder it is using under **Settings → Your Files**. Because
+nothing of yours is inside the program folder, updating or reinstalling the
+app can't disturb it — replace the folder, delete it, move it to another
+drive, it makes no difference.
 
 **This is the folder to back up.** The app folder itself is disposable; it can
 always be downloaded again.
 
-> Keep this folder out of OneDrive or any other sync client.
-> `order_history.db` is a live SQLite database, and syncing it while the app
-> has it open can corrupt it. For a backup, copy the files on a schedule
-> rather than running the app against a synced folder.
+### Putting it in OneDrive
+
+Under **Settings → Your Files**, type the folder you want and press **Use
+This Folder** — for example `C:\Users\User\OneDrive\KebbetZamen`. The app
+copies what it currently has into that folder, starts using it immediately,
+and keeps using it after a restart. **Back to Default Folder** undoes it.
+
+Files already in the target folder are kept, never overwritten — so pointing
+a second machine at an existing folder adopts what's there rather than
+flattening it.
+
+> **Run the app on one computer at a time when the folder is synced.** If two
+> computers share it and both have the app open, OneDrive will produce
+> conflict copies and the two order histories will diverge. The app opens
+> `order_history.db` only for the moment of a write, so ordinary single-machine
+> use is fine.
 
 ### Alternative: download from the Actions run
 

@@ -365,8 +365,14 @@
 
     <div class="sp-section">
       <h3>Your Files</h3>
-      <p class="sp-note">The dictionary, combos, preferences, settings and order history are kept here — outside the app folder, so updating or reinstalling the app never touches them. Back up this folder.</p>
+      <p class="sp-note">The dictionary, combos, preferences, settings and order history are kept here — outside the app folder, so updating or reinstalling the app never touches them. Put it in OneDrive (or any synced folder) to have it backed up off the machine. Only run the app on one computer at a time when you do — two computers sharing the folder will fight over the order history.</p>
       <div class="json-file-active" id="dataFolderPath"></div>
+      <div class="json-file-row">
+        <input id="dataFolderInput" type="text" class="json-file-input" placeholder="Full path to the folder…">
+        <button class="btn-json-load" onclick="setDataFolder()">Use This Folder</button>
+      </div>
+      <button class="btn-json-reset" onclick="resetDataFolder()">↩ Back to Default Folder</button>
+      <div class="json-file-status" id="dataFolderStatus"></div>
     </div>
 
     <div class="sp-section">
@@ -928,10 +934,41 @@ async function showDataFolder() {
     if (info.migrated && info.migrated.length) {
       el.textContent += `  —  carried over from the previous install: ${info.migrated.join(', ')}`;
     }
+    const input = document.getElementById('dataFolderInput');
+    if (input && !input.value) input.placeholder = info.path || 'Full path to the folder…';
   } catch (e) {
     el.textContent = '';
   }
 }
+
+async function _moveDataFolder(path) {
+  const status = document.getElementById('dataFolderStatus');
+  status.textContent = 'Moving…';
+  try {
+    const res = await fetch('/data/location/set', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+    const data = await res.json();
+    if (!data.ok) { status.textContent = '⚠ ' + (data.error || 'Could not use that folder'); return; }
+    status.textContent = data.copied && data.copied.length
+      ? `✅ Now using this folder — copied ${data.copied.join(', ')}`
+      : '✅ Now using this folder';
+    document.getElementById('dataFolderInput').value = '';
+    await showDataFolder();
+    await loadSettingsData();   // everything was reloaded from the new folder
+  } catch (e) {
+    status.textContent = '⚠ ' + e.message;
+  }
+}
+
+function setDataFolder() {
+  const path = document.getElementById('dataFolderInput').value.trim();
+  if (!path) { document.getElementById('dataFolderStatus').textContent = '⚠ Enter a folder path first'; return; }
+  _moveDataFolder(path);
+}
+
+function resetDataFolder() { _moveDataFolder(''); }
 
 function renderPrinterFields() {
   const mode = settingsData.printer_mode || 'windows_name';
