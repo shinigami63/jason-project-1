@@ -550,6 +550,10 @@ function addItemRow(item = null) {
   div.className = 'item-card';
   div.id = `item-${i}`;
   div.dataset.category = category;
+  // Items whose Arabic comes from a dictionary entry other than their English
+  // name (Biscuits & Raha inside a combo) learn corrections under that entry,
+  // so editing the combo line doesn't rewrite the standalone translation.
+  if (item?.dict_key) div.dataset.dictKey = item.dict_key;
   div.innerHTML = `
     <div class="item-main">
       <div class="qty-badge" contenteditable id="qty${i}">${escHtml(qty)}</div>
@@ -650,17 +654,22 @@ function autoLearnCorrections() {
   if (!parsedOrder || !parsedOrder.items) return;
   const corrections = {};
   const prefCorrections = {};
-  const originalByName = {};
+  // Keyed by the dictionary entry each item was translated through — that's
+  // its English name, unless it carries a dict_key of its own (Biscuits &
+  // Raha inside a combo, which shares a name with the standalone item but
+  // has its own translation).
+  const originalByKey = {};
   parsedOrder.items.forEach(it => {
-    if (it && it.name) originalByName[it.name.toLowerCase().trim()] = it;
+    const k = it && (it.dict_key || it.name);
+    if (k) originalByKey[k.toLowerCase().trim()] = it;
   });
   document.querySelectorAll('#itemsList .item-card').forEach(card => {
     const id = card.id.replace('item-', '');
     const currentEn = get(`en${id}`);
     const currentAr = get(`ar${id}`);
-    const key = currentEn.toLowerCase().trim();
+    const key = (card.dataset.dictKey || currentEn).toLowerCase().trim();
     if (!key || !currentAr) return;
-    const original = originalByName[key];
+    const original = originalByKey[key];
     if (!original) return;
     if (currentAr !== original.arabic_name) {
       corrections[key] = currentAr;

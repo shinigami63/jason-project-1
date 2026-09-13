@@ -47,6 +47,13 @@ COMBOS = {
     },
 }
 
+# Biscuits & Raha is also sold on its own, where it prints with its plain
+# dictionary translation ("بسكوت وراحة"). The two pieces that come inside a
+# combo are a different line for the kitchen, so they get their own
+# dictionary entry (editable on the Dictionary page like any other word).
+BISCUITS_RAHA_COMBO_KEY = 'Biscuits & Raha (Combo)'
+BISCUITS_RAHA_COMBO_AR = 'راحة وبسكوت حبتين'
+
 COMBOS_WITH_BISCUITS_RAHA = {
     "kebbeh zghertawiyeh combo",
     "taouk combo",
@@ -205,7 +212,13 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'original_add_ons': [],
             'category':         'Desserts Zamen',
             'is_raw':           False,
-            'arabic_name':      'بسكوت وراحة قطعتين مطبقين',
+            # The kitchen preps the combo portion differently from a
+            # Biscuits & Raha ordered on its own, so it prints under its own
+            # Arabic wording. 'name' stays the plain menu name (that's what
+            # the sales reports group on); 'dict_key' is what the dictionary
+            # is looked up by -- see translate_items() in receipt_server.py.
+            'dict_key':         BISCUITS_RAHA_COMBO_KEY,
+            'arabic_name':      BISCUITS_RAHA_COMBO_AR,
         })
 
     # Always wrap in a bag frame — even qty=1 gets a "كيس" frame.
@@ -353,6 +366,13 @@ def _items(lines):
                         display_qty = f'{kg:g}KG'
                     else:
                         display_qty = f'{grams}G'
+                elif qty and qty.isdigit() and int(qty) > 1:
+                    # A non-weight portion (a tray size, say) can't be summed
+                    # into one number, so the count rides along with the label
+                    # instead of being dropped — three medium trays are three
+                    # trays to the kitchen, not one. translate_qty() in
+                    # receipt_server.py turns this into "صينية وسط ×3".
+                    display_qty = f'{qty} x {pref}'
                 else:
                     display_qty = pref
             elif not is_portion and variant:

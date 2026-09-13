@@ -331,16 +331,20 @@ class ReceiptCanvas:
         # .qty{min-width:8mm;padding:0 2mm;border-radius:2px} sitting in a
         # flex row with the name, so the badge is as tall as the row's line
         # box and the two are 2mm apart (.row{gap:2mm}).
-        qf, nf = _font(900, qty_size), _font(700, name_size)
-        qty_str = str(qty)
-        qb = self.d.textbbox((0, 0), qty_str, font=qf)
-        badge_w = max(self.mm(8), (qb[2] - qb[0]) + 2 * self.mm(2))
+        # The qty is usually a number ("2", "1KG"), but a tray order puts an
+        # Arabic size label in there instead ("صينية وسط"), so it goes through
+        # _Line like every other string on the receipt -- Pillow's own text()
+        # can't shape or reverse Arabic without libraqm (see module docstring).
+        qty_line = _Line(self.d, str(qty), 900, qty_size)
+        qty_w = qty_line.width()
+        badge_w = max(self.mm(8), qty_w + 2 * self.mm(2))
         badge_h = _Line(self.d, '', 700, name_size).line_h
         top = self.y
         left = self.item_right() - badge_w
         self.d.rounded_rectangle([left, top, left + badge_w, top + badge_h],
                                   radius=self.px(2), fill=BLACK)
-        self.d.text((left + badge_w / 2, top + badge_h / 2), qty_str, font=qf, fill=WHITE, anchor='mm')
+        qty_line.draw_right_aligned(self.img, left + (badge_w + qty_w) / 2,
+                                     top + (badge_h - qty_line.line_h) / 2, WHITE)
 
         right_x = left - self.mm(2)
         max_w = right_x - self.item_left()
