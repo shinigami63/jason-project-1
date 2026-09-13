@@ -364,6 +364,12 @@
     </div>
 
     <div class="sp-section">
+      <h3>Your Files</h3>
+      <p class="sp-note">The dictionary, combos, preferences, settings and order history are kept here — outside the app folder, so updating or reinstalling the app never touches them. Back up this folder.</p>
+      <div class="json-file-active" id="dataFolderPath"></div>
+    </div>
+
+    <div class="sp-section">
       <h3>Custom JSON File</h3>
       <p class="sp-note">Point the app to a specific JSON file. It will replace all current dictionary entries and become the file the app reads from and saves to. Previously saved entries will be deleted.</p>
       <div class="json-file-row">
@@ -908,6 +914,23 @@ async function loadSettingsData() {
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
+  showDataFolder();
+}
+
+// Where the shop's own files live. Read from its own endpoint rather than
+// /settings, because that payload gets written straight back to settings.json.
+async function showDataFolder() {
+  const el = document.getElementById('dataFolderPath');
+  if (!el) return;
+  try {
+    const info = await (await fetch('/data/location')).json();
+    el.textContent = info.path || '';
+    if (info.migrated && info.migrated.length) {
+      el.textContent += `  —  carried over from the previous install: ${info.migrated.join(', ')}`;
+    }
+  } catch (e) {
+    el.textContent = '';
+  }
 }
 
 function renderPrinterFields() {

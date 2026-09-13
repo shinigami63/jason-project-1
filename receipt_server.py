@@ -1,4 +1,4 @@
-import threading, os, sys, platform, subprocess, sqlite3, re, tempfile
+import threading, os, sys, platform, subprocess, sqlite3, re, shutil, tempfile
 from html import escape as _esc
 try:
     import webview
@@ -15,10 +15,63 @@ from printer_client import print_receipt_image as send_to_printer, list_windows_
 app = Flask(__name__)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-def get_data_path(filename):
+# The shop's own files -- dictionary, combos, preferences, settings and the
+# order history -- live in a per-user data folder, NOT next to the exe. Beside
+# the program they made every update delicate (replace the app without
+# disturbing them) and put the SQLite history wherever the exe happened to
+# sit: one install had it inside OneDrive, where syncing an open database can
+# corrupt it. Out here the program folder is disposable.
+APP_DATA_DIR_NAME = 'KebbetZamen'
+
+# The shop's files, as opposed to the program's own -- what gets carried over
+# from an older install and what a backup needs to cover.
+DATA_FILES = ('dictionary.json', 'preferences.json', 'combos.json',
+              'settings.json', 'order_history.db')
+
+def _program_dir():
+    """Where the app runs from -- and where its data used to be kept."""
     if getattr(sys, 'frozen', False):
-        return os.path.join(os.path.dirname(sys.executable), filename)
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def _data_dir():
+    if not getattr(sys, 'frozen', False):
+        # Running from source: stay in the checkout, so development never
+        # reads or writes the installed app's real data.
+        return _program_dir()
+    base = (os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
+            or os.path.expanduser('~'))
+    return os.path.join(base, APP_DATA_DIR_NAME)
+
+DATA_DIR = _data_dir()
+
+def get_data_path(filename):
+    return os.path.join(DATA_DIR, filename)
+
+def migrate_data_from_program_dir():
+    """Carries the shop's files over from an install that kept them next to
+    the exe. Copies rather than moves, so the old install stays intact as a
+    fallback, and never overwrites a file already here -- which makes it a
+    one-time step that is harmless to run on every start."""
+    src_dir = _program_dir()
+    if os.path.abspath(src_dir) == os.path.abspath(DATA_DIR):
+        return []
+    carried = []
+    for name in DATA_FILES:
+        src, dst = os.path.join(src_dir, name), get_data_path(name)
+        if os.path.exists(dst) or not os.path.exists(src):
+            continue
+        try:
+            shutil.copy2(src, dst)
+            carried.append(name)
+        except OSError:
+            # One unreadable file falls back to defaults for that file only;
+            # failing the whole start over it would be worse.
+            pass
+    return carried
+
+os.makedirs(DATA_DIR, exist_ok=True)
+MIGRATED_FILES = migrate_data_from_program_dir()
 
 DICTIONARY_PATH = get_data_path('dictionary.json')
 PREFERENCES_PATH = get_data_path('preferences.json')
@@ -841,6 +894,12 @@ def save_preferences():
 @app.route('/settings', methods=['GET'])
 def get_settings():
     return jsonify(SETTINGS)
+
+# Separate from /settings on purpose: that payload is written straight back to
+# settings.json when the user saves, so it must carry nothing but settings.
+@app.route('/data/location', methods=['GET'])
+def data_location():
+    return jsonify({'path': DATA_DIR, 'migrated': MIGRATED_FILES})
 
 @app.route('/settings/save', methods=['POST'])
 def save_sett():

@@ -25,20 +25,42 @@ build from the permanent release link:
    **Send to → Desktop (create shortcut)**.
 3. Start it from that shortcut.
 
+On its first start the app looks for files from an older install sitting next
+to the old `.exe` and copies them into its data folder (see below). Your
+dictionary, combos and order history carry over on their own — nothing to do.
+The old copies are left where they are, as a fallback.
+
 ### Updating an existing installation
 
 1. Close the Kebbet Zamen app if it is running.
-2. Unzip the download **on top of** your existing `KebzetZamen` folder and
-   choose **Replace the files in the destination**.
-3. Start it again and re-send the order from the browser extension.
+2. Unzip the download over your `KebzetZamen` folder, replacing the files.
+3. Start it again.
 
-Extracting over the folder is the safe way to update: the zip contains only
-`KebzetZamen.exe` and `_internal`, so your own files sitting in that folder —
-`dictionary.json`, `combos.json`, `preferences.json`, `settings.json` and
-`order_history.db` — are left untouched. **Do not delete the old folder and
-unzip a fresh one**, or you lose your dictionary and your order history with
-it. (If you do want to move the app somewhere else, copy those five files
-into the new folder before deleting the old one.)
+## Where your files are kept
+
+The shop's own files live **outside** the app folder, in:
+
+```
+C:\Users\<you>\AppData\Local\KebbetZamen\
+├── dictionary.json
+├── combos.json
+├── preferences.json
+├── settings.json
+└── order_history.db
+```
+
+The app shows this path under **Settings → Your Files**. Because nothing of
+yours is inside the program folder, updating or reinstalling the app can't
+disturb it — replace the folder, delete it, move it to another drive, it
+makes no difference.
+
+**This is the folder to back up.** The app folder itself is disposable; it can
+always be downloaded again.
+
+> Keep this folder out of OneDrive or any other sync client.
+> `order_history.db` is a live SQLite database, and syncing it while the app
+> has it open can corrupt it. For a backup, copy the files on a schedule
+> rather than running the app against a synced folder.
 
 ### Alternative: download from the Actions run
 
