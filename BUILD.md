@@ -1,40 +1,58 @@
 # Getting the Kebbet Zamen app
 
-The Windows app you double-click is **built automatically by GitHub Actions**
+The Windows app is **built automatically by GitHub Actions**
 (`.github/workflows/build.yml`) every time changes land on the `master`
-branch. The build produces a **`KebzetZamen` folder** containing
-`KebzetZamen.exe` and an `_internal` folder next to it — `ui.html`,
-`extract.py` and the Arabic font live inside `_internal`. The app needs that
-folder; the `.exe` on its own will not run.
+branch. Each build publishes an installer, `KebzetZamenSetup.exe`, and the
+plain app folder as a zip.
 
-> **Important:** changing the source or merging a pull request does **not**
-> update the app already on your computer. Each merge produces a **new**
-> build — you have to download it and put it in place of the old one.
+The app itself is a `KebzetZamen` folder: `KebzetZamen.exe` with an
+`_internal` folder beside it holding `ui.html`, `extract.py` and the Arabic
+font. The `.exe` on its own will not run.
 
-## Download the latest app
+> **Important:** merging a pull request does **not** update the app already on
+> your computer. Each merge produces a **new** build, and the app has to
+> install it — see below.
 
-After the workflow finishes (a minute or two after a merge), get the newest
-build from the permanent release link:
+## Updating: from inside the app
 
-**https://github.com/shinigami63/jason-project-1/releases/latest/download/KebzetZamen-Windows.zip**
+Once the app is installed, updates don't involve this page at all.
 
-### First time
+**Settings → App Version → Check for Updates.** If a newer build has been
+published, press **Download & Install**: the app fetches the installer from
+GitHub, checks it against the SHA-256 GitHub published for that file,
+installs it and starts itself again. Your files are untouched.
 
-1. Unzip it wherever you want the app to live (e.g. `C:\KebzetZamen`).
-2. Open the `KebzetZamen` folder, right-click `KebzetZamen.exe` →
-   **Send to → Desktop (create shortcut)**.
-3. Start it from that shortcut.
+The app knows its own version because the build stamps one in
+(`1.0.<build number>`, always increasing), and the release is named with the
+same string.
+
+## Installing the first time
+
+Get the installer from the permanent release link:
+
+**https://github.com/shinigami63/jason-project-1/releases/latest/download/KebzetZamenSetup.exe**
+
+Run it. It installs to `%LOCALAPPDATA%\Programs\KebbetZamen`, makes a desktop
+and Start-menu shortcut, and registers an uninstaller — **no administrator
+prompt**, because it installs for your user only.
 
 On its first start the app looks for files from an older install sitting next
 to the old `.exe` and copies them into its data folder (see below). Your
 dictionary, combos and order history carry over on their own — nothing to do.
 The old copies are left where they are, as a fallback.
 
-### Updating an existing installation
+> The very first move to the installer has to be done by hand — an app built
+> before this existed has no version and no update button. After that, the
+> button handles it.
 
-1. Close the Kebbet Zamen app if it is running.
-2. Unzip the download over your `KebzetZamen` folder, replacing the files.
-3. Start it again.
+### Installing by hand instead
+
+The plain folder is published too, for installing without a setup program:
+
+**https://github.com/shinigami63/jason-project-1/releases/latest/download/KebzetZamen-Windows.zip**
+
+Unzip it wherever you want the app to live, make a shortcut to
+`KebzetZamen.exe` inside the folder, and to update, unzip a newer one over it.
 
 ## Where your files are kept
 

@@ -28,9 +28,20 @@ jobs:
       # protection and by Defender's heuristics. A onedir build ships the same
       # files laid out on disk, which trips far fewer of those, and starts
       # faster because nothing is unpacked at launch.
+      # The build number is what the app's "Check for updates" compares
+      # against: it reads this version out of the bundle, and the release is
+      # named with the same string. github.run_number only ever goes up.
+      - name: Work out the version
+        id: ver
+        shell: bash
+        run: |
+          echo "version=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo -n "1.0.${{ github.run_number }}" > version.txt
+          cat version.txt
+
       - name: Build EXE
         run: |
-          pyinstaller --onedir --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "fonts/Cairo.ttf;fonts" --collect-data escpos --name "KebzetZamen" receipt_server.py
+          pyinstaller --onedir --noconsole --add-data "ui.html;." --add-data "extract.py;." --add-data "version.txt;." --add-data "fonts/Cairo.ttf;fonts" --collect-data escpos --name "KebzetZamen" receipt_server.py
 
       # Files the app loads at runtime (the UI, the Arabic font, python-escpos's
       # printer capabilities table) are data, not imports, so PyInstaller only
@@ -42,34 +53,54 @@ jobs:
         run: |
           $app = 'dist/KebzetZamen'
           if (-not (Test-Path "$app/KebzetZamen.exe")) { throw "exe not built: $app/KebzetZamen.exe" }
-          foreach ($f in @('ui.html', 'extract.py', 'Cairo.ttf', 'capabilities.json')) {
+          foreach ($f in @('ui.html', 'extract.py', 'version.txt', 'Cairo.ttf', 'capabilities.json')) {
             $hit = Get-ChildItem -Path $app -Recurse -Filter $f -ErrorAction SilentlyContinue | Select-Object -First 1
             if (-not $hit) { throw "not bundled into the app folder: $f" }
             Write-Host "bundled: $($hit.FullName)"
           }
 
-      # One zip holding the KebzetZamen folder, so the release has a single
-      # file to download and unzipping gives you the folder to keep.
+      # Inno Setup isn't on the runner image, so install it. It builds the
+      # installer the app downloads and runs for its own updates.
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the installer
+        run: |
+          # ${env:...} braces, not $env:...(x86) -- the parentheses in the
+          # variable name don't parse in the bare form.
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC not found at $iscc" }
+          & $iscc /DAppVersion=${{ steps.ver.outputs.version }} installer.iss
+          if (-not (Test-Path 'installer_out/KebzetZamenSetup.exe')) { throw "installer not produced" }
+
+      # The zip stays published alongside the installer, for installing by
+      # hand without running a setup program.
       - name: Zip the app folder
         run: Compress-Archive -Path dist/KebzetZamen -DestinationPath dist/KebzetZamen-Windows.zip -Force
 
-      - name: Upload app folder
+      - name: Upload build output
         uses: actions/upload-artifact@v4
         with:
           name: KebzetZamen-Windows
-          path: dist/KebzetZamen
+          path: |
+            installer_out/KebzetZamenSetup.exe
+            dist/KebzetZamen
 
-      # Publish the freshly built app to a rolling "latest" release so there
-      # is one permanent, login-free download link that always points at the
-      # newest build:
-      #   https://github.com/<owner>/<repo>/releases/latest/download/KebzetZamen-Windows.zip
+      # Publish to a rolling "latest" release so there is one permanent,
+      # login-free download link that always points at the newest build:
+      #   https://github.com/<owner>/<repo>/releases/latest/download/KebzetZamenSetup.exe
+      #
+      # The release NAME carries the version: the tag is the fixed string
+      # "latest", so the app's update check reads the version from the name.
       - name: Publish to "latest" release
         if: github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Latest build
-          files: dist/KebzetZamen-Windows.zip
+          name: KebzetZamen ${{ steps.ver.outputs.version }}
+          files: |
+            installer_out/KebzetZamenSetup.exe
+            dist/KebzetZamen-Windows.zip
 
       # The release keeps assets that a build no longer uploads, so the old
       # single-file exe would sit there forever and the old download link

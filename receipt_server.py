@@ -926,6 +926,37 @@ def get_settings():
 
 # Separate from /settings on purpose: that payload is written straight back to
 # settings.json when the user saves, so it must carry nothing but settings.
+@app.route('/update/check', methods=['GET'])
+def update_check():
+    import updater
+    return jsonify(updater.check())
+
+@app.route('/update/install', methods=['POST'])
+def update_install():
+    """Downloads the installer, checks it against GitHub's digest, starts it
+    and then quits -- the installer can't replace files this process is
+    running from while it is still running."""
+    import updater
+    info = updater.check()
+    if not info.get('ok'):
+        return jsonify({'ok': False, 'error': info.get('error', 'Update check failed')})
+    if not info.get('newer'):
+        return jsonify({'ok': False, 'error': 'Already up to date.'})
+
+    path, err = updater.download_installer(info.get('url'), info.get('digest'))
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    err = updater.launch_installer(path)
+    if err:
+        return jsonify({'ok': False, 'error': err})
+
+    def _quit():
+        # Long enough for this response to reach the page.
+        threading.Event().wait(2)
+        os._exit(0)
+    threading.Thread(target=_quit, daemon=True).start()
+    return jsonify({'ok': True, 'version': info.get('latest')})
+
 @app.route('/data/location', methods=['GET'])
 def data_location():
     return jsonify({'path': DATA_DIR, 'default': _default_data_dir(),

@@ -364,6 +364,17 @@
     </div>
 
     <div class="sp-section">
+      <h3>App Version</h3>
+      <p class="sp-note">Updates come straight from GitHub — the app downloads the installer, checks it against the checksum GitHub published, installs it and starts again. Your files are not touched.</p>
+      <div class="json-file-active" id="versionLine"></div>
+      <div class="json-file-row">
+        <button class="btn-json-load" id="updateCheckBtn" onclick="checkForUpdate()">Check for Updates</button>
+        <button class="btn-json-load" id="updateInstallBtn" onclick="installUpdate()" style="display:none">Download &amp; Install</button>
+      </div>
+      <div class="json-file-status" id="updateStatus"></div>
+    </div>
+
+    <div class="sp-section">
       <h3>Your Files</h3>
       <p class="sp-note">The dictionary, combos, preferences, settings and order history are kept here — outside the app folder, so updating or reinstalling the app never touches them. Put it in OneDrive (or any synced folder) to have it backed up off the machine. Only run the app on one computer at a time when you do — two computers sharing the folder will fight over the order history.</p>
       <div class="json-file-active" id="dataFolderPath"></div>
@@ -921,6 +932,22 @@ async function loadSettingsData() {
   document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
   showDataFolder();
+  showVersion();
+}
+
+async function showVersion() {
+  const line = document.getElementById('versionLine');
+  if (!line) return;
+  try {
+    const info = await (await fetch('/update/check')).json();
+    line.textContent = `Installed: ${info.current || 'unknown'}`;
+    if (info.ok && info.newer) {
+      document.getElementById('updateStatus').textContent = `✅ ${info.latest} is available`;
+      document.getElementById('updateInstallBtn').style.display = '';
+    }
+  } catch (e) {
+    line.textContent = '';
+  }
 }
 
 // Where the shop's own files live. Read from its own endpoint rather than
@@ -969,6 +996,53 @@ function setDataFolder() {
 }
 
 function resetDataFolder() { _moveDataFolder(''); }
+
+// ── Updates ──────────────────────────────────────────────────────────────────
+async function checkForUpdate() {
+  const status = document.getElementById('updateStatus');
+  const line   = document.getElementById('versionLine');
+  const btn    = document.getElementById('updateCheckBtn');
+  const install = document.getElementById('updateInstallBtn');
+  btn.disabled = true;
+  status.textContent = 'Checking…';
+  try {
+    const info = await (await fetch('/update/check')).json();
+    line.textContent = `Installed: ${info.current || 'unknown'}`;
+    if (!info.ok) {
+      status.textContent = '⚠ ' + (info.error || 'Could not check');
+    } else if (info.newer) {
+      status.textContent = `✅ ${info.latest} is available`;
+      install.style.display = '';
+    } else {
+      status.textContent = info.current === 'dev'
+        ? 'Running from source — updates only apply to the installed app.'
+        : '✅ Up to date';
+      install.style.display = 'none';
+    }
+  } catch (e) {
+    status.textContent = '⚠ ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function installUpdate() {
+  const status  = document.getElementById('updateStatus');
+  const install = document.getElementById('updateInstallBtn');
+  install.disabled = true;
+  status.textContent = 'Downloading… the app will close and reopen on its own.';
+  try {
+    const data = await (await fetch('/update/install', { method: 'POST' })).json();
+    status.textContent = data.ok
+      ? `Installing ${data.version}… this window will close.`
+      : '⚠ ' + (data.error || 'Update failed');
+    if (!data.ok) install.disabled = false;
+  } catch (e) {
+    // The app exits as part of installing, so a dropped request here is the
+    // expected ending rather than a failure.
+    status.textContent = 'Installing… this window will close.';
+  }
+}
 
 function renderPrinterFields() {
   const mode = settingsData.printer_mode || 'windows_name';
