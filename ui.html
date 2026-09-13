@@ -364,6 +364,29 @@
     </div>
 
     <div class="sp-section">
+      <h3>App Version</h3>
+      <p class="sp-note">Updates come straight from GitHub — the app downloads the installer, checks it against the checksum GitHub published, installs it and starts again. Your files are not touched.</p>
+      <div class="json-file-active" id="versionLine"></div>
+      <div class="json-file-row">
+        <button class="btn-json-load" id="updateCheckBtn" onclick="checkForUpdate()">Check for Updates</button>
+        <button class="btn-json-load" id="updateInstallBtn" onclick="installUpdate()" style="display:none">Download &amp; Install</button>
+      </div>
+      <div class="json-file-status" id="updateStatus"></div>
+    </div>
+
+    <div class="sp-section">
+      <h3>Your Files</h3>
+      <p class="sp-note">The dictionary, combos, preferences, settings and order history are kept here — outside the app folder, so updating or reinstalling the app never touches them. Put it in OneDrive (or any synced folder) to have it backed up off the machine. Only run the app on one computer at a time when you do — two computers sharing the folder will fight over the order history.</p>
+      <div class="json-file-active" id="dataFolderPath"></div>
+      <div class="json-file-row">
+        <input id="dataFolderInput" type="text" class="json-file-input" placeholder="Full path to the folder…">
+        <button class="btn-json-load" onclick="setDataFolder()">Use This Folder</button>
+      </div>
+      <button class="btn-json-reset" onclick="resetDataFolder()">↩ Back to Default Folder</button>
+      <div class="json-file-status" id="dataFolderStatus"></div>
+    </div>
+
+    <div class="sp-section">
       <h3>Custom JSON File</h3>
       <p class="sp-note">Point the app to a specific JSON file. It will replace all current dictionary entries and become the file the app reads from and saves to. Previously saved entries will be deleted.</p>
       <div class="json-file-row">
@@ -908,6 +931,117 @@ async function loadSettingsData() {
   setJsonFileUI(settingsData.custom_dict_path || '');
   document.getElementById('jsonFileStatus').textContent = '';
   document.getElementById('spStatus').textContent = '';
+  showDataFolder();
+  showVersion();
+}
+
+async function showVersion() {
+  const line = document.getElementById('versionLine');
+  if (!line) return;
+  try {
+    const info = await (await fetch('/update/check')).json();
+    line.textContent = `Installed: ${info.current || 'unknown'}`;
+    if (info.ok && info.newer) {
+      document.getElementById('updateStatus').textContent = `✅ ${info.latest} is available`;
+      document.getElementById('updateInstallBtn').style.display = '';
+    }
+  } catch (e) {
+    line.textContent = '';
+  }
+}
+
+// Where the shop's own files live. Read from its own endpoint rather than
+// /settings, because that payload gets written straight back to settings.json.
+async function showDataFolder() {
+  const el = document.getElementById('dataFolderPath');
+  if (!el) return;
+  try {
+    const info = await (await fetch('/data/location')).json();
+    el.textContent = info.path || '';
+    if (info.migrated && info.migrated.length) {
+      el.textContent += `  —  carried over from the previous install: ${info.migrated.join(', ')}`;
+    }
+    const input = document.getElementById('dataFolderInput');
+    if (input && !input.value) input.placeholder = info.path || 'Full path to the folder…';
+  } catch (e) {
+    el.textContent = '';
+  }
+}
+
+async function _moveDataFolder(path) {
+  const status = document.getElementById('dataFolderStatus');
+  status.textContent = 'Moving…';
+  try {
+    const res = await fetch('/data/location/set', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+    const data = await res.json();
+    if (!data.ok) { status.textContent = '⚠ ' + (data.error || 'Could not use that folder'); return; }
+    status.textContent = data.copied && data.copied.length
+      ? `✅ Now using this folder — copied ${data.copied.join(', ')}`
+      : '✅ Now using this folder';
+    document.getElementById('dataFolderInput').value = '';
+    await showDataFolder();
+    await loadSettingsData();   // everything was reloaded from the new folder
+  } catch (e) {
+    status.textContent = '⚠ ' + e.message;
+  }
+}
+
+function setDataFolder() {
+  const path = document.getElementById('dataFolderInput').value.trim();
+  if (!path) { document.getElementById('dataFolderStatus').textContent = '⚠ Enter a folder path first'; return; }
+  _moveDataFolder(path);
+}
+
+function resetDataFolder() { _moveDataFolder(''); }
+
+// ── Updates ──────────────────────────────────────────────────────────────────
+async function checkForUpdate() {
+  const status = document.getElementById('updateStatus');
+  const line   = document.getElementById('versionLine');
+  const btn    = document.getElementById('updateCheckBtn');
+  const install = document.getElementById('updateInstallBtn');
+  btn.disabled = true;
+  status.textContent = 'Checking…';
+  try {
+    const info = await (await fetch('/update/check')).json();
+    line.textContent = `Installed: ${info.current || 'unknown'}`;
+    if (!info.ok) {
+      status.textContent = '⚠ ' + (info.error || 'Could not check');
+    } else if (info.newer) {
+      status.textContent = `✅ ${info.latest} is available`;
+      install.style.display = '';
+    } else {
+      status.textContent = info.current === 'dev'
+        ? 'Running from source — updates only apply to the installed app.'
+        : '✅ Up to date';
+      install.style.display = 'none';
+    }
+  } catch (e) {
+    status.textContent = '⚠ ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function installUpdate() {
+  const status  = document.getElementById('updateStatus');
+  const install = document.getElementById('updateInstallBtn');
+  install.disabled = true;
+  status.textContent = 'Downloading… the app will close and reopen on its own.';
+  try {
+    const data = await (await fetch('/update/install', { method: 'POST' })).json();
+    status.textContent = data.ok
+      ? `Installing ${data.version}… this window will close.`
+      : '⚠ ' + (data.error || 'Update failed');
+    if (!data.ok) install.disabled = false;
+  } catch (e) {
+    // The app exits as part of installing, so a dropped request here is the
+    // expected ending rather than a failure.
+    status.textContent = 'Installing… this window will close.';
+  }
 }
 
 function renderPrinterFields() {

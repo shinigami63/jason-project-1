@@ -1,5 +1,13 @@
 __pycache__/
 *.pyc
+
+# Build output. version.txt is written by the build, not kept in the repo --
+# a build from source has no version and reports "dev".
+version.txt
+dist/
+build/
+installer_out/
+*.spec
 order_history.db
 settings.json
 combos.json

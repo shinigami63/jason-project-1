@@ -1,4 +1,4 @@
-import threading, os, sys, platform, subprocess, sqlite3, re, tempfile
+import threading, os, sys, platform, subprocess, sqlite3, re, shutil, tempfile
 from html import escape as _esc
 try:
     import webview
@@ -15,10 +15,85 @@ from printer_client import print_receipt_image as send_to_printer, list_windows_
 app = Flask(__name__)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-def get_data_path(filename):
+# The shop's own files -- dictionary, combos, preferences, settings and the
+# order history -- live in a per-user data folder, NOT next to the exe. Beside
+# the program they made every update delicate (replace the app without
+# disturbing them) and put the SQLite history wherever the exe happened to
+# sit: one install had it inside OneDrive, where syncing an open database can
+# corrupt it. Out here the program folder is disposable.
+APP_DATA_DIR_NAME = 'KebbetZamen'
+
+# The shop's files, as opposed to the program's own -- what gets carried over
+# from an older install and what a backup needs to cover.
+DATA_FILES = ('dictionary.json', 'preferences.json', 'combos.json',
+              'settings.json', 'order_history.db')
+
+def _program_dir():
+    """Where the app runs from -- and where its data used to be kept."""
     if getattr(sys, 'frozen', False):
-        return os.path.join(os.path.dirname(sys.executable), filename)
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def _default_data_dir():
+    base = (os.environ.get('LOCALAPPDATA') or os.environ.get('APPDATA')
+            or os.path.expanduser('~'))
+    return os.path.join(base, APP_DATA_DIR_NAME)
+
+def _pointer_path():
+    """Records a data folder chosen in Settings. Kept in the default folder
+    rather than in the data folder itself -- the app has to know where to
+    look before it knows where the data is."""
+    return os.path.join(_default_data_dir(), 'data_folder.txt')
+
+def _chosen_data_dir():
+    try:
+        with open(_pointer_path(), encoding='utf-8') as f:
+            chosen = f.read().strip()
+        return chosen or None
+    except OSError:
+        return None
+
+def _data_dir():
+    # An explicit override wins everywhere, including when running from
+    # source -- it is how the tests drive this.
+    env = os.environ.get('KEBZET_DATA_DIR', '').strip()
+    if env:
+        return env
+    if not getattr(sys, 'frozen', False):
+        # Running from source: stay in the checkout, so development never
+        # reads or writes the installed app's real data.
+        return _program_dir()
+    return _chosen_data_dir() or _default_data_dir()
+
+DATA_DIR = _data_dir()
+
+def get_data_path(filename):
+    return os.path.join(DATA_DIR, filename)
+
+def migrate_data_from_program_dir():
+    """Carries the shop's files over from an install that kept them next to
+    the exe. Copies rather than moves, so the old install stays intact as a
+    fallback, and never overwrites a file already here -- which makes it a
+    one-time step that is harmless to run on every start."""
+    src_dir = _program_dir()
+    if os.path.abspath(src_dir) == os.path.abspath(DATA_DIR):
+        return []
+    carried = []
+    for name in DATA_FILES:
+        src, dst = os.path.join(src_dir, name), get_data_path(name)
+        if os.path.exists(dst) or not os.path.exists(src):
+            continue
+        try:
+            shutil.copy2(src, dst)
+            carried.append(name)
+        except OSError:
+            # One unreadable file falls back to defaults for that file only;
+            # failing the whole start over it would be worse.
+            pass
+    return carried
+
+os.makedirs(DATA_DIR, exist_ok=True)
+MIGRATED_FILES = migrate_data_from_program_dir()
 
 DICTIONARY_PATH = get_data_path('dictionary.json')
 PREFERENCES_PATH = get_data_path('preferences.json')
@@ -310,6 +385,18 @@ def load_dictionary():
         _write_dictionary(d)
     return d
 
+def _apply_custom_dict_setting():
+    """A custom dictionary file chosen in Settings overrides the one in the
+    data folder. Used at startup and again whenever the data folder changes,
+    so switching folders can't silently drop it."""
+    global DICTIONARY_PATH, _using_custom_dict
+    DICTIONARY_PATH = get_data_path('dictionary.json')
+    _using_custom_dict = False
+    custom = SETTINGS.get('custom_dict_path')
+    if custom and os.path.exists(custom):
+        DICTIONARY_PATH = custom
+        _using_custom_dict = True
+
 def _write_dictionary(d):
     with open(DICTIONARY_PATH, 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
@@ -459,12 +546,7 @@ def _write_settings(s):
 
 # ── In-memory state ───────────────────────────────────────────────────────────
 SETTINGS = load_settings()
-if 'custom_dict_path' in SETTINGS:
-    _cp = SETTINGS['custom_dict_path']
-    if _cp and os.path.exists(_cp):
-        DICTIONARY_PATH = _cp
-        _using_custom_dict = True
-
+_apply_custom_dict_setting()
 DICTIONARY = load_dictionary()
 PREFERENCES = load_preferences()
 COMBOS_DATA = load_combos()
@@ -841,6 +923,93 @@ def save_preferences():
 @app.route('/settings', methods=['GET'])
 def get_settings():
     return jsonify(SETTINGS)
+
+# Separate from /settings on purpose: that payload is written straight back to
+# settings.json when the user saves, so it must carry nothing but settings.
+@app.route('/update/check', methods=['GET'])
+def update_check():
+    import updater
+    return jsonify(updater.check())
+
+@app.route('/update/install', methods=['POST'])
+def update_install():
+    """Downloads the installer, checks it against GitHub's digest, starts it
+    and then quits -- the installer can't replace files this process is
+    running from while it is still running."""
+    import updater
+    info = updater.check()
+    if not info.get('ok'):
+        return jsonify({'ok': False, 'error': info.get('error', 'Update check failed')})
+    if not info.get('newer'):
+        return jsonify({'ok': False, 'error': 'Already up to date.'})
+
+    path, err = updater.download_installer(info.get('url'), info.get('digest'))
+    if err:
+        return jsonify({'ok': False, 'error': err})
+    err = updater.launch_installer(path)
+    if err:
+        return jsonify({'ok': False, 'error': err})
+
+    def _quit():
+        # Long enough for this response to reach the page.
+        threading.Event().wait(2)
+        os._exit(0)
+    threading.Thread(target=_quit, daemon=True).start()
+    return jsonify({'ok': True, 'version': info.get('latest')})
+
+@app.route('/data/location', methods=['GET'])
+def data_location():
+    return jsonify({'path': DATA_DIR, 'default': _default_data_dir(),
+                    'migrated': MIGRATED_FILES})
+
+@app.route('/data/location/set', methods=['POST'])
+def set_data_location():
+    """Points the app at a different data folder -- e.g. one inside OneDrive,
+    to get the shop's files backed up off the machine. Copies what is there
+    now into the new folder (without overwriting files already in it) and
+    reloads everything from the new location."""
+    global DATA_DIR, DICTIONARY_PATH, PREFERENCES_PATH, COMBOS_PATH, HISTORY_DB_PATH
+    global DICTIONARY, PREFERENCES, COMBOS_DATA, SETTINGS
+    try:
+        new_dir = (request.json.get('path') or '').strip().strip('"')
+        if not new_dir:
+            new_dir = _default_data_dir()
+        new_dir = os.path.abspath(os.path.expandvars(os.path.expanduser(new_dir)))
+        if os.path.abspath(new_dir) == os.path.abspath(DATA_DIR):
+            return jsonify({'ok': True, 'path': DATA_DIR, 'copied': []})
+        if os.path.exists(new_dir) and not os.path.isdir(new_dir):
+            return jsonify({'ok': False, 'error': 'That path is a file, not a folder.'})
+
+        os.makedirs(new_dir, exist_ok=True)
+        copied = []
+        for name in DATA_FILES:
+            src, dst = os.path.join(DATA_DIR, name), os.path.join(new_dir, name)
+            if os.path.exists(dst) or not os.path.exists(src):
+                continue
+            shutil.copy2(src, dst)
+            copied.append(name)
+
+        # Remember the choice before switching, so a crash mid-reload still
+        # comes back up pointed at the folder the files were copied into.
+        os.makedirs(_default_data_dir(), exist_ok=True)
+        with open(_pointer_path(), 'w', encoding='utf-8') as f:
+            f.write('' if os.path.abspath(new_dir) == os.path.abspath(_default_data_dir())
+                    else new_dir)
+
+        DATA_DIR = new_dir
+        PREFERENCES_PATH = get_data_path('preferences.json')
+        COMBOS_PATH = get_data_path('combos.json')
+        HISTORY_DB_PATH = get_data_path('order_history.db')
+        SETTINGS = load_settings()
+        _apply_custom_dict_setting()
+        DICTIONARY = load_dictionary()
+        PREFERENCES = load_preferences()
+        COMBOS_DATA = load_combos()
+        _apply_combos(COMBOS_DATA)
+        init_history_db()
+        return jsonify({'ok': True, 'path': DATA_DIR, 'copied': copied})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
 
 @app.route('/settings/save', methods=['POST'])
 def save_sett():
