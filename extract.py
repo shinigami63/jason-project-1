@@ -5,6 +5,10 @@ WEIGHT_PATTERN = re.compile(r'^(\d+)\s*(G|g|gr|KG|kg)$', re.IGNORECASE)
 
 QUANTITY_TYPES = {'quantity', 'qty', 'amount', 'count', 'number'}
 
+# A customer comment on a line shows up as "message<comment>" -- the Toters
+# message icon ligature immediately followed by the raw note.
+COMMENT_PATTERN = re.compile(r'^message(.+)$')
+
 RAW_MEAT_ITEMS = {
     "raw kibbeh", "raw kebbeh", "kebbeh nayeh", "kibbeh nayeh",
     "raw tenderloin", "raw habra", "raw orfali", "raw liver",
@@ -146,6 +150,19 @@ def _prepare_by(text):
 
 _ARABIC_NUMS = ['١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩', '١٠']
 
+def _item_comments(lines, start_i):
+    """Customer comments belonging to the item that starts at start_i, kept
+    verbatim (never translated). The block ends at the next item's "Qty" or at
+    the order's "Additional Charge" section, whichever comes first."""
+    out = []
+    for j in range(start_i, len(lines)):
+        if lines[j] in ('Qty', 'Additional Charge'):
+            break
+        m = COMMENT_PATTERN.match(lines[j])
+        if m and m.group(1).strip():
+            out.append(m.group(1).strip())
+    return out
+
 def _make_combo_item(name, portion, category='Other'):
     return {
         'qty':              _format_qty(portion),
@@ -167,6 +184,12 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
     combo_name_lower = combo_name.lower().strip()
     combo_def = COMBOS.get(combo_name_lower, {})
 
+    # A comment on a combo ("Pls send cutlery and bread") applies to the whole
+    # bag, not to one of its components, so it rides on the bag header and
+    # prints once under the bag title. Comments left on individual choice lines
+    # land in the same block on the page and are treated the same way.
+    comments = _item_comments(lines, start_i)
+
     # Build the item list for a single bag
     per_bag = []
 
@@ -179,8 +202,11 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
 
     # 2. Customer-chosen items (Choose X > Y lines)
     for j in range(start_i, len(lines)):
-        if lines[j] == 'Qty':
+        if lines[j] in ('Qty', 'Additional Charge'):
             break
+        if COMMENT_PATTERN.match(lines[j]):
+            # Collected above; a comment is never read as a choice line.
+            continue
         m = re.search(r'Choose\s+([\w\s]+?)\s*[>:]\s*(.+)', lines[j])
         if not m:
             continue
@@ -243,6 +269,7 @@ def _parse_combo_components(lines, start_i, combo_name, combo_qty_str):
             'is_raw':           False,
             'is_bag_header':    True,
             'bag_size':         len(per_bag),
+            'comments':         list(comments),
         })
         result.extend(per_bag)
     return result
@@ -302,19 +329,15 @@ def _items(lines):
             pref_type = None
             pref = None
             add_ons_list = []
-            comments_list = []
+            # Customer comments are kept verbatim — no translation — as their
+            # own lines under the item.
+            comments_list = _item_comments(lines, i)
             has_yogurt_side = False
             for j in range(i, len(lines)):
-                if lines[j] == 'Qty':
+                if lines[j] in ('Qty', 'Additional Charge'):
                     break
-                # Customer comment: shown as "message<comment>" (the Toters
-                # message icon ligature followed by the raw note). Keep it
-                # verbatim — no translation — as its own line.
-                cm = re.match(r'^message(.+)$', lines[j])
-                if cm:
-                    comment_text = cm.group(1).strip()
-                    if comment_text:
-                        comments_list.append(comment_text)
+                if COMMENT_PATTERN.match(lines[j]):
+                    # Collected above; a comment is never read as an add-on.
                     continue
                 m = re.search(r'(?:Choose|Add)\s+([\w\s]+?)\s*[>:]\s*(.+)', lines[j])
                 if not m:

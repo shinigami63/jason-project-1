@@ -123,3 +123,10 @@ Customer comments on Toters orders (lines that begin with the `message`
 icon, e.g. `messageفرمة ناعمة`) are now picked up and printed as their own
 note line under the item, kept verbatim with no translation. This only shows
 up once you are running a freshly built app.
+
+A comment left on a **combo** (e.g. `messagePls send cutlery and bread` on a
+Kebbeh Zghertawiyeh Combo) used to be dropped, because a combo is expanded
+into its components and the comment belonged to none of them. It now rides on
+the bag: it shows on the bag header card in the app, where it can be edited or
+removed like any other note, and prints once under the bag title, above the
+items. An order for two combos prints the note on both bags.
