@@ -371,7 +371,7 @@ class ReceiptCanvas:
             self.note(c)
         self.y += self.mm(2.5)
 
-    def bag_frame(self, title, bag_items):
+    def bag_frame(self, title, bag_items, comments=None):
         # .bag-frame{border:2.5px solid;border-radius:3px;margin:3mm 0 2mm},
         # with the title bar and the items sitting inside that border -- so
         # while its items are drawn, everything is inset by the border.
@@ -388,6 +388,15 @@ class ReceiptCanvas:
         self.y = top + title_h
 
         self.inset += border_w
+        # A comment left on the combo itself is about the whole bag, so it
+        # prints once under the title instead of against one component.
+        bag_notes = [c for c in (comments or []) if c]
+        for c in bag_notes:
+            self.y += self.mm(2)
+            self.note(c)
+        if bag_notes:
+            self.y += self.mm(2)
+            self.dotted_line(fill=GRAY)
         for i, item in enumerate(bag_items):
             self.render_item(item)
             if i < len(bag_items) - 1:
@@ -475,7 +484,7 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
             bag_size = item.get('bag_size', 0)
             bag_items = items[idx + 1: idx + 1 + bag_size]
             idx += 1 + bag_size
-            c.bag_frame(item['arabic_name'], bag_items)
+            c.bag_frame(item['arabic_name'], bag_items, item.get('comments'))
         else:
             c.render_item(item)
             # .item's dotted bottom border, on every item including the
