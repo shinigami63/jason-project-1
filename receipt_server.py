@@ -859,6 +859,7 @@ def printer_test():
     try:
         ctx = {
             'customer': 'Test Print', 'prepare_by': datetime.now().strftime('%b %d, %I:%M %p'),
+            'prepare_time': datetime.now().strftime('%I:%M %p').lstrip('0'),
             'order_num': '0000', 'branch': SETTINGS.get('branch', 'الأشرفية'),
             'time_lbl': 'وقت التجهيز', 'scheduled': False, 'day_ar': '',
             'items': [{'qty': '1', 'arabic_name': 'طباعة تجريبية', 'comments': ['إذا وصلك هذا فالطابعة تعمل بشكل صحيح']}],
@@ -1180,6 +1181,10 @@ def _receipt_context(d):
     return {
         'customer':   d.get('customer', ''),
         'prepare_by': d.get('prepare_by', ''),
+        # The receipt prints the time big under the Arabic day, so it needs
+        # the time on its own. Empty when the text didn't parse; the renderer
+        # then falls back to prepare_by as it stands.
+        'prepare_time': dt.strftime('%I:%M %p').lstrip('0') if dt else '',
         'order_num':  d.get('order_num', ''),
         'branch':     SETTINGS.get('branch', 'الأشرفية'),
         'time_lbl':   'تجهيز قبل' if d.get('scheduled') else 'وقت التجهيز',
