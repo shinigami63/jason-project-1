@@ -306,6 +306,23 @@ class ReceiptCanvas:
         left_x, y_after_v = vline.draw_right_aligned(self.img, self.box_left() + vline.width(), self.y, BLACK)
         self.y += max(y_after_l, y_after_v) - self.y + self.mm(1.5)
 
+    def big_time(self, time_text, gap_before=0):
+        """The prepare-by time, centered and big, sitting directly under the
+        Arabic day. It used to be one of three small info rows between the
+        customer's name and the order number, where the kitchen kept reading
+        straight past it -- the day and the time are what they act on, so
+        they read as one block at the top of the receipt."""
+        self.y += gap_before
+        # A parsed time ("11:30 AM", the widest shape it takes, ~400px of
+        # the 512px content width) still fits at 96, but the raw fallback
+        # can be anything Toters wrote there, so step the size down until it
+        # does rather than letting it run off the paper.
+        size = 96
+        max_w = self.box_right() - self.box_left()
+        while size > 26 and _Line(self.d, time_text, 900, size).width() > max_w:
+            size -= 2
+        self.center_text(time_text, 900, size)
+
     def wrapped_rtl(self, text, weight, size, right_x, max_width, fill=BLACK):
         words = text.split(' ')
         lines, cur = [], ''
@@ -428,9 +445,9 @@ ABSOLUTE_MAX_MM = 1500
 
 def render_receipt_image(ctx, width_px=576, width_mm=72):
     """ctx is the dict shape produced by _receipt_context() in
-    receipt_server.py: customer, prepare_by, order_num, branch, time_lbl,
-    scheduled (bool), day_ar (str, possibly empty), items (already
-    translated -- see translate_items()).
+    receipt_server.py: customer, prepare_by, prepare_time, order_num,
+    branch, time_lbl, scheduled (bool), day_ar (str, possibly empty),
+    items (already translated -- see translate_items()).
 
     Returns the cropped PIL image. However long the order actually is, the
     full receipt is always drawn and printed -- nothing is cut off. Compare
@@ -466,10 +483,16 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     if ctx.get('day_ar'):
         c.advance(c.mm(2))
         c.center_text(ctx['day_ar'], 900, 42)
+    # The day, then the time right under it -- prepare_time is the time half
+    # of prepare_by. When the "Prepare by" text didn't parse (an ASAP order,
+    # an unfamiliar format) there's no day either, so the raw string prints
+    # here instead and nothing is lost.
+    time_text = ctx.get('prepare_time') or ctx.get('prepare_by') or ''
+    if time_text:
+        c.big_time(time_text, gap_before=c.mm(1.5) if ctx.get('day_ar') else c.mm(2))
     c.dashed_line(gap_before=c.mm(3), gap_after=c.mm(3))
 
     c.info_row('الزبون', ctx['customer'])
-    c.info_row(ctx['time_lbl'], ctx['prepare_by'])
     c.info_row('رقم الطلب', f'#{ctx["order_num"]}')
     # .info's rule is a 1px dashed border, thinner than .hd's/.ft's 2px ones
     c.thin_dashed_line(gap_before=c.mm(1.5))
