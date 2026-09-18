@@ -9,6 +9,13 @@ QUANTITY_TYPES = {'quantity', 'qty', 'amount', 'count', 'number'}
 # message icon ligature immediately followed by the raw note.
 COMMENT_PATTERN = re.compile(r'^message(.+)$')
 
+# Cutlery rides with every order unless the customer ticked "no cutlery" on
+# Toters, which shows up as one fixed note on the page -- "message" (the
+# message icon ligature) followed by "Please do not send cutlery". That exact
+# sentence is the whole signal: when it's there the receipt leaves the cutlery
+# icon off, otherwise the icon prints.
+NO_CUTLERY_PATTERN = re.compile(r'please\s+do\s+not\s+send\s+cutlery', re.IGNORECASE)
+
 RAW_MEAT_ITEMS = {
     "raw kibbeh", "raw kebbeh", "kebbeh nayeh", "kibbeh nayeh",
     "raw tenderloin", "raw habra", "raw orfali", "raw liver",
@@ -133,8 +140,15 @@ def parse_order(text):
         'customer':  _customer(text),
         'order_num': _order_num(text),
         'prepare_by': _prepare_by(text),
+        'cutlery':   _cutlery(text),
         'items':     _items(lines)
     }
+
+def _cutlery(text):
+    """True when cutlery goes out with the order -- i.e. the page doesn't
+    carry Toters' "Please do not send cutlery" note. An order that says
+    nothing about cutlery gets cutlery."""
+    return not NO_CUTLERY_PATTERN.search(text)
 
 def _customer(text):
     m = re.search(r'Customer\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)', text)

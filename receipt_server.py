@@ -580,6 +580,11 @@ def init_history_db():
         category           TEXT,
         qty                 TEXT
     )''')
+    # Added after the first releases: orders stored before it default to 1,
+    # which is also what a receipt prints when the flag is missing.
+    cols = {r['name'] for r in conn.execute('PRAGMA table_info(orders)')}
+    if 'cutlery' not in cols:
+        conn.execute('ALTER TABLE orders ADD COLUMN cutlery INTEGER DEFAULT 1')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(delivery_date)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_items_date ON order_items(delivery_date)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_items_order ON order_items(order_num)')
@@ -647,16 +652,17 @@ def save_order_to_history(d):
     conn = _db()
     conn.execute('DELETE FROM order_items WHERE order_num = ?', (order_num,))
     conn.execute('''INSERT INTO orders
-            (order_num, customer, prepare_by, delivery_date, delivery_datetime, scheduled, branch, printed_at, items_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (order_num, customer, prepare_by, delivery_date, delivery_datetime, scheduled, branch, printed_at, items_json, cutlery)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(order_num) DO UPDATE SET
             customer=excluded.customer, prepare_by=excluded.prepare_by,
             delivery_date=excluded.delivery_date, delivery_datetime=excluded.delivery_datetime,
             scheduled=excluded.scheduled, branch=excluded.branch,
-            printed_at=excluded.printed_at, items_json=excluded.items_json''',
+            printed_at=excluded.printed_at, items_json=excluded.items_json,
+            cutlery=excluded.cutlery''',
         (order_num, d.get('customer', ''), d.get('prepare_by', ''), delivery_date, delivery_datetime,
          1 if d.get('scheduled') else 0, SETTINGS.get('branch', ''), datetime.now().isoformat(),
-         json.dumps(items, ensure_ascii=False)))
+         json.dumps(items, ensure_ascii=False), 0 if d.get('cutlery') is False else 1))
     for item in items:
         if item.get('is_bag_header'):
             continue
@@ -676,6 +682,9 @@ def get_stored_order(order_num):
         'customer':   row['customer'],
         'prepare_by': row['prepare_by'],
         'scheduled':  bool(row['scheduled']),
+        # Orders stored before the column existed read back as cutlery, which
+        # is what they printed at the time.
+        'cutlery':    row['cutlery'] is None or bool(row['cutlery']),
         'items':      json.loads(row['items_json']),
     }
 
@@ -1189,6 +1198,10 @@ def _receipt_context(d):
         'branch':     SETTINGS.get('branch', 'الأشرفية'),
         'time_lbl':   'تجهيز قبل' if d.get('scheduled') else 'وقت التجهيز',
         'scheduled':  bool(d.get('scheduled')),
+        # Cutlery goes out unless the order asked for none, so anything that
+        # never carried the flag (an old stored order, a hand-built payload)
+        # prints the cutlery mark.
+        'cutlery':    d.get('cutlery', True) is not False,
         'day_ar':     day_ar,
         'items':      d.get('items') or [],
     }

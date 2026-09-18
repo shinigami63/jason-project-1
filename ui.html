@@ -43,6 +43,8 @@
   .meta-row:last-child { margin-bottom: 0; }
   .meta-label { color: var(--muted); font-size: 12px; min-width: 90px; }
   .badge { background: #e65100; color: #fff; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+  .meta-toggle { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .meta-toggle input { width: 15px; height: 15px; accent-color: var(--red); cursor: pointer; }
   .edit-hint { font-size: 10px; color: #bbb; margin-bottom: 8px; text-align: right; }
 
   [contenteditable] { border-bottom: 1.5px dashed #ccc; min-width: 40px; outline: none; cursor: text; padding: 1px 2px; border-radius: 2px; }
@@ -519,6 +521,13 @@ function renderUI(data) {
     <div class="meta-row"><span class="meta-label">Customer</span><span class="meta-value" contenteditable id="m-customer">${escHtml(data.customer)}</span></div>
     <div class="meta-row"><span class="meta-label">Prepare by</span><span class="meta-value" contenteditable id="m-prepare">${escHtml(data.prepare_by)}</span></div>
     <div class="meta-row"><span class="meta-label">Order #</span><span class="meta-value" contenteditable id="m-order">${escHtml(data.order_num)}</span></div>
+    <div class="meta-row">
+      <span class="meta-label">Cutlery</span>
+      <label class="meta-toggle">
+        <input type="checkbox" id="m-cutlery" ${data.cutlery === false ? '' : 'checked'}>
+        🍴 print icon
+      </label>
+    </div>
   `;
   itemCount = 0;
   document.getElementById('itemsList').innerHTML = '';
@@ -650,7 +659,11 @@ async function printReceipt() {
     items.push({ qty, arabic_name: ar, name: get(`en${id}`), category: card.dataset.category || '', comments });
   });
 
-  const payload = { ...parsedOrder, customer: get('m-customer'), prepare_by: get('m-prepare'), order_num: get('m-order'), items };
+  // The cutlery box is ticked from the order text (unticked only when Toters
+  // said "Please do not send cutlery"), but the operator has the last word.
+  const cutleryBox = document.getElementById('m-cutlery');
+  const payload = { ...parsedOrder, customer: get('m-customer'), prepare_by: get('m-prepare'),
+                    order_num: get('m-order'), cutlery: cutleryBox ? cutleryBox.checked : true, items };
   autoLearnCorrections();
   const btn    = document.getElementById('printBtn');
   const status = document.getElementById('status');
@@ -811,7 +824,8 @@ async function toggleHistCard(hd) {
   try {
     const res = await fetch(`/history/order/${encodeURIComponent(orderNum)}`);
     const order = await res.json();
-    prevEl.innerHTML = renderPreviewItems(order.items || []);
+    const cutlery = order.cutlery === false ? '<div class="preview-note">🚫 No cutlery</div>' : '';
+    prevEl.innerHTML = cutlery + renderPreviewItems(order.items || []);
     prevEl.dataset.loaded = '1';
   } catch (e) {
     prevEl.textContent = 'Failed to load order.';

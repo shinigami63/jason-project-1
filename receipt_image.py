@@ -323,6 +323,57 @@ class ReceiptCanvas:
             size -= 2
         self.center_text(time_text, 900, size)
 
+    def _cutlery_icon_w(self, h):
+        return round(h * 0.78)
+
+    def _cutlery_icon(self, right_x, top, h):
+        """A fork and knife drawn as plain filled shapes, sized to h and
+        ending at right_x. Nothing font-based: the Arabic font carries no
+        cutlery glyph, and an emoji would print as a box on a thermal
+        printer."""
+        w = self._cutlery_icon_w(h)
+        left = right_x - w
+        bar = max(1, round(h * 0.085))     # handle thickness
+
+        # Fork on the left: the head is drawn solid and the two gaps between
+        # the tines are then cut back out in white. Drawing three separate
+        # tines instead leaves gaps of a pixel or two at this size, which a
+        # thermal printer closes up into one black block.
+        fork_w = round(w * 0.44)
+        fork_cx = left + fork_w / 2
+        head_bot = top + round(h * 0.42)
+        self.d.rounded_rectangle([fork_cx - fork_w / 2, top + round(h * 0.03),
+                                  fork_cx + fork_w / 2, head_bot],
+                                 radius=round(fork_w * 0.18), fill=BLACK)
+        notch_w = max(2, round(fork_w * 0.16))
+        for k in (-1, 1):
+            x = fork_cx + k * fork_w * 0.19
+            self.d.rectangle([x - notch_w / 2, top - 1,
+                              x + notch_w / 2, top + round(h * 0.28)], fill=WHITE)
+        self.d.rectangle([fork_cx - bar / 2, head_bot - round(h * 0.02),
+                          fork_cx + bar / 2, top + h], fill=BLACK)
+
+        # Knife on the right: a blade tapering to a tip, then the handle.
+        knife_w = round(w * 0.28)
+        knife_cx = left + w - knife_w / 2
+        blade_bot = top + round(h * 0.52)
+        self.d.polygon([(knife_cx + knife_w / 2, top + round(h * 0.03)),
+                        (knife_cx + knife_w / 2, blade_bot),
+                        (knife_cx - knife_w / 2, blade_bot),
+                        (knife_cx - knife_w / 2, top + round(h * 0.30))], fill=BLACK)
+        self.d.rectangle([knife_cx - bar / 2, blade_bot - round(h * 0.02),
+                          knife_cx + bar / 2, top + h], fill=BLACK)
+
+    def cutlery_mark(self, gap_before=0, gap_after=0, height_mm=11):
+        """The cutlery icon on its own, centered. Only called for an order
+        that gets cutlery -- an order carrying Toters' "Please do not send
+        cutlery" note prints nothing here at all."""
+        h = self.mm(height_mm)
+        w = self._cutlery_icon_w(h)
+        top = self.y + gap_before
+        self._cutlery_icon((self.w + w) / 2, top, h)
+        self.y = top + h + gap_after
+
     def wrapped_rtl(self, text, weight, size, right_x, max_width, fill=BLACK):
         words = text.split(' ')
         lines, cur = [], ''
@@ -447,6 +498,7 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     """ctx is the dict shape produced by _receipt_context() in
     receipt_server.py: customer, prepare_by, prepare_time, order_num,
     branch, time_lbl, scheduled (bool), day_ar (str, possibly empty),
+    cutlery (bool, defaults to True when absent),
     items (already translated -- see translate_items()).
 
     Returns the cropped PIL image. However long the order actually is, the
@@ -496,6 +548,10 @@ def render_receipt_image(ctx, width_px=576, width_mm=72):
     c.info_row('رقم الطلب', f'#{ctx["order_num"]}')
     # .info's rule is a 1px dashed border, thinner than .hd's/.ft's 2px ones
     c.thin_dashed_line(gap_before=c.mm(1.5))
+
+    # Cutlery unless the order asked for none -- see _cutlery() in extract.py.
+    if ctx.get('cutlery', True) is not False:
+        c.cutlery_mark(gap_before=c.mm(2.5))
 
     c.black_bar('الطلبية', size=25, weight=700, gap_before=c.mm(2))
 
