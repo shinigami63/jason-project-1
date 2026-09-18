@@ -210,6 +210,18 @@ class _Line:
         return self.draw.textlength(chunk, font=self._pil_font) + self.tracking * len(chunk)
 
 
+def _bez(p0, p1, p2, steps=28):
+    """Points along a quadratic bezier, for the curved edges of the cutlery
+    icon -- Pillow draws polygons, not curves."""
+    out = []
+    for i in range(steps + 1):
+        t = i / steps
+        u = 1 - t
+        out.append((u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
+                    u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]))
+    return out
+
+
 class ReceiptCanvas:
     def __init__(self, width_px, max_height_px, dpmm):
         self.w = width_px
@@ -323,48 +335,70 @@ class ReceiptCanvas:
             size -= 2
         self.center_text(time_text, 900, size)
 
+    # The three pieces and the gap between them, as fractions of the icon's
+    # height -- a fork, a knife and a spoon standing side by side.
+    _CUTLERY_PARTS = (('fork', 0.22), ('knife', 0.20), ('spoon', 0.20))
+    _CUTLERY_GAP = 0.10
+
     def _cutlery_icon_w(self, h):
-        return round(h * 0.78)
+        parts = self._CUTLERY_PARTS
+        return sum(f for _, f in parts) * h + self._CUTLERY_GAP * h * (len(parts) - 1)
+
+    def _cutlery_handle(self, cx, y0, y1, w0, w1):
+        """A handle narrowing from w0 down to w1, with a rounded foot."""
+        self.d.polygon([(cx - w0 / 2, y0), (cx + w0 / 2, y0),
+                        (cx + w1 / 2, y1), (cx - w1 / 2, y1)], fill=BLACK)
+        self.d.ellipse([cx - w1 / 2, y1 - w1 / 2, cx + w1 / 2, y1 + w1 / 2], fill=BLACK)
+
+    def _cutlery_fork(self, cx, top, h, w, tines=4):
+        # The head is filled solid and the gaps between the tines are cut back
+        # out in white: drawn as four separate bars they come out a pixel or
+        # two apart at this size, which a thermal printer closes into a block.
+        self.d.rounded_rectangle([cx - w / 2, top + h * 0.02, cx + w / 2, top + h * 0.34],
+                                 radius=w * 0.16, fill=BLACK)
+        gap = max(2, round(w * 0.13))
+        for k in range(1, tines):
+            x = cx - w / 2 + k * w / tines
+            self.d.rectangle([x - gap / 2, top - 1, x + gap / 2, top + h * 0.26], fill=WHITE)
+        # The shoulders curve in from the head to meet the handle.
+        self.d.polygon(
+            _bez((cx - w / 2, top + h * 0.30), (cx - w * 0.30, top + h * 0.40), (cx - h * 0.035, top + h * 0.46)) +
+            list(reversed(_bez((cx + w / 2, top + h * 0.30), (cx + w * 0.30, top + h * 0.40), (cx + h * 0.035, top + h * 0.46)))),
+            fill=BLACK)
+        self._cutlery_handle(cx, top + h * 0.44, top + h * 0.97, h * 0.07, h * 0.055)
+
+    def _cutlery_knife(self, cx, top, h, w):
+        # Straight back on the left, the belly curving out to the right, and a
+        # rounded tip -- the handle carries straight on down from the back.
+        x_back = cx - w / 2
+        cx_h = cx - w * 0.06
+        hw = h * 0.07
+        y_top, y_bot = top + h * 0.03, top + h * 0.50
+        belly = _bez((x_back + w * 0.12, y_top), (cx + w * 0.55, top + h * 0.20),
+                     (cx_h + hw / 2, y_bot))
+        self.d.polygon([(x_back, y_top + w * 0.14), (x_back, top + h * 0.44),
+                        (cx_h - hw / 2, y_bot)] + list(reversed(belly)), fill=BLACK)
+        self.d.ellipse([x_back, y_top, x_back + w * 0.28, y_top + w * 0.28], fill=BLACK)
+        self._cutlery_handle(cx_h, y_bot - 1, top + h * 0.97, hw, h * 0.055)
+
+    def _cutlery_spoon(self, cx, top, h, w):
+        self.d.ellipse([cx - w / 2, top + h * 0.02, cx + w / 2, top + h * 0.38], fill=BLACK)
+        self._cutlery_handle(cx, top + h * 0.33, top + h * 0.97, h * 0.07, h * 0.055)
 
     def _cutlery_icon(self, right_x, top, h):
-        """A fork and knife drawn as plain filled shapes, sized to h and
+        """Fork, knife and spoon drawn as plain filled shapes, sized to h and
         ending at right_x. Nothing font-based: the Arabic font carries no
         cutlery glyph, and an emoji would print as a box on a thermal
         printer."""
-        w = self._cutlery_icon_w(h)
-        left = right_x - w
-        bar = max(1, round(h * 0.085))     # handle thickness
+        draw = {'fork': self._cutlery_fork, 'knife': self._cutlery_knife,
+                'spoon': self._cutlery_spoon}
+        x = right_x - self._cutlery_icon_w(h)
+        for name, frac in self._CUTLERY_PARTS:
+            piece_w = frac * h
+            draw[name](x + piece_w / 2, top, h, piece_w)
+            x += piece_w + self._CUTLERY_GAP * h
 
-        # Fork on the left: the head is drawn solid and the two gaps between
-        # the tines are then cut back out in white. Drawing three separate
-        # tines instead leaves gaps of a pixel or two at this size, which a
-        # thermal printer closes up into one black block.
-        fork_w = round(w * 0.44)
-        fork_cx = left + fork_w / 2
-        head_bot = top + round(h * 0.42)
-        self.d.rounded_rectangle([fork_cx - fork_w / 2, top + round(h * 0.03),
-                                  fork_cx + fork_w / 2, head_bot],
-                                 radius=round(fork_w * 0.18), fill=BLACK)
-        notch_w = max(2, round(fork_w * 0.16))
-        for k in (-1, 1):
-            x = fork_cx + k * fork_w * 0.19
-            self.d.rectangle([x - notch_w / 2, top - 1,
-                              x + notch_w / 2, top + round(h * 0.28)], fill=WHITE)
-        self.d.rectangle([fork_cx - bar / 2, head_bot - round(h * 0.02),
-                          fork_cx + bar / 2, top + h], fill=BLACK)
-
-        # Knife on the right: a blade tapering to a tip, then the handle.
-        knife_w = round(w * 0.28)
-        knife_cx = left + w - knife_w / 2
-        blade_bot = top + round(h * 0.52)
-        self.d.polygon([(knife_cx + knife_w / 2, top + round(h * 0.03)),
-                        (knife_cx + knife_w / 2, blade_bot),
-                        (knife_cx - knife_w / 2, blade_bot),
-                        (knife_cx - knife_w / 2, top + round(h * 0.30))], fill=BLACK)
-        self.d.rectangle([knife_cx - bar / 2, blade_bot - round(h * 0.02),
-                          knife_cx + bar / 2, top + h], fill=BLACK)
-
-    def cutlery_mark(self, gap_before=0, gap_after=0, height_mm=11):
+    def cutlery_mark(self, gap_before=0, gap_after=0, height_mm=12):
         """The cutlery icon on its own, centered. Only called for an order
         that gets cutlery -- an order carrying Toters' "Please do not send
         cutlery" note prints nothing here at all."""
