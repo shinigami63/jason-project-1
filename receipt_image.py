@@ -344,30 +344,39 @@ class ReceiptCanvas:
         parts = self._CUTLERY_PARTS
         return sum(f for _, f in parts) * h + self._CUTLERY_GAP * h * (len(parts) - 1)
 
-    def _cutlery_handle(self, cx, y0, y1, w0, w1):
-        """A handle narrowing from w0 down to w1, with a rounded foot."""
-        self.d.polygon([(cx - w0 / 2, y0), (cx + w0 / 2, y0),
-                        (cx + w1 / 2, y1), (cx - w1 / 2, y1)], fill=BLACK)
-        self.d.ellipse([cx - w1 / 2, y1 - w1 / 2, cx + w1 / 2, y1 + w1 / 2], fill=BLACK)
+    # Supersampling factor the icon's geometry is laid out at before it's
+    # scaled down onto the receipt. Drawn straight at final size, a 12mm
+    # icon's curves land on ~100 pixels and come out visibly faceted; drawn
+    # 8x larger and resampled, the outline follows the real curve.
+    _CUTLERY_SS = 8
 
-    def _cutlery_fork(self, cx, top, h, w, tines=4):
+    @staticmethod
+    def _cutlery_handle(d, cx, y0, y1, w0, w1, fill):
+        """A handle narrowing from w0 down to w1, with a rounded foot."""
+        d.polygon([(cx - w0 / 2, y0), (cx + w0 / 2, y0),
+                   (cx + w1 / 2, y1), (cx - w1 / 2, y1)], fill=fill)
+        d.ellipse([cx - w1 / 2, y1 - w1 / 2, cx + w1 / 2, y1 + w1 / 2], fill=fill)
+
+    @classmethod
+    def _cutlery_fork(cls, d, cx, top, h, w, fill, hole, tines=4):
         # The head is filled solid and the gaps between the tines are cut back
-        # out in white: drawn as four separate bars they come out a pixel or
-        # two apart at this size, which a thermal printer closes into a block.
-        self.d.rounded_rectangle([cx - w / 2, top + h * 0.02, cx + w / 2, top + h * 0.34],
-                                 radius=w * 0.16, fill=BLACK)
-        gap = max(2, round(w * 0.13))
+        # out: drawn as four separate bars they come out a pixel or two apart
+        # once scaled down, which a thermal printer closes into one block.
+        d.rounded_rectangle([cx - w / 2, top + h * 0.02, cx + w / 2, top + h * 0.34],
+                            radius=w * 0.14, fill=fill)
+        gap = w * 0.13
         for k in range(1, tines):
             x = cx - w / 2 + k * w / tines
-            self.d.rectangle([x - gap / 2, top - 1, x + gap / 2, top + h * 0.26], fill=WHITE)
+            d.rectangle([x - gap / 2, top - 1, x + gap / 2, top + h * 0.27], fill=hole)
         # The shoulders curve in from the head to meet the handle.
-        self.d.polygon(
+        d.polygon(
             _bez((cx - w / 2, top + h * 0.30), (cx - w * 0.30, top + h * 0.40), (cx - h * 0.035, top + h * 0.46)) +
             list(reversed(_bez((cx + w / 2, top + h * 0.30), (cx + w * 0.30, top + h * 0.40), (cx + h * 0.035, top + h * 0.46)))),
-            fill=BLACK)
-        self._cutlery_handle(cx, top + h * 0.44, top + h * 0.97, h * 0.07, h * 0.055)
+            fill=fill)
+        cls._cutlery_handle(d, cx, top + h * 0.44, top + h * 0.97, h * 0.07, h * 0.055, fill)
 
-    def _cutlery_knife(self, cx, top, h, w):
+    @classmethod
+    def _cutlery_knife(cls, d, cx, top, h, w, fill, hole):
         # Straight back on the left, the belly curving out to the right, and a
         # rounded tip -- the handle carries straight on down from the back.
         x_back = cx - w / 2
@@ -376,27 +385,52 @@ class ReceiptCanvas:
         y_top, y_bot = top + h * 0.03, top + h * 0.50
         belly = _bez((x_back + w * 0.12, y_top), (cx + w * 0.55, top + h * 0.20),
                      (cx_h + hw / 2, y_bot))
-        self.d.polygon([(x_back, y_top + w * 0.14), (x_back, top + h * 0.44),
-                        (cx_h - hw / 2, y_bot)] + list(reversed(belly)), fill=BLACK)
-        self.d.ellipse([x_back, y_top, x_back + w * 0.28, y_top + w * 0.28], fill=BLACK)
-        self._cutlery_handle(cx_h, y_bot - 1, top + h * 0.97, hw, h * 0.055)
+        d.polygon([(x_back, y_top + w * 0.14), (x_back, top + h * 0.44),
+                   (cx_h - hw / 2, y_bot)] + list(reversed(belly)), fill=fill)
+        d.ellipse([x_back, y_top, x_back + w * 0.28, y_top + w * 0.28], fill=fill)
+        cls._cutlery_handle(d, cx_h, y_bot - 1, top + h * 0.97, hw, h * 0.055, fill)
 
-    def _cutlery_spoon(self, cx, top, h, w):
-        self.d.ellipse([cx - w / 2, top + h * 0.02, cx + w / 2, top + h * 0.38], fill=BLACK)
-        self._cutlery_handle(cx, top + h * 0.33, top + h * 0.97, h * 0.07, h * 0.055)
+    @classmethod
+    def _cutlery_spoon(cls, d, cx, top, h, w, fill, hole):
+        # An egg-shaped bowl: widest below its middle, drawn as two curves per
+        # side so it necks into the handle instead of stopping at an ellipse.
+        y0, y_wide = top + h * 0.02, top + h * 0.21
+        side = []
+        for s in (1, -1):
+            # Both controls sit on the bowl's widest line, so the two curves
+            # meet with the same tangent and the join doesn't show as a corner.
+            half = (_bez((cx, y0), (cx + s * w / 2, y0 + h * 0.03), (cx + s * w / 2, y_wide)) +
+                    _bez((cx + s * w / 2, y_wide), (cx + s * w / 2, top + h * 0.33),
+                         (cx + s * h * 0.035, top + h * 0.44)))
+            side.append(half if s == 1 else list(reversed(half)))
+        d.polygon(side[0] + side[1], fill=fill)
+        cls._cutlery_handle(d, cx, top + h * 0.42, top + h * 0.97, h * 0.07, h * 0.055, fill)
 
     def _cutlery_icon(self, right_x, top, h):
         """Fork, knife and spoon drawn as plain filled shapes, sized to h and
         ending at right_x. Nothing font-based: the Arabic font carries no
         cutlery glyph, and an emoji would print as a box on a thermal
-        printer."""
+        printer.
+
+        The three pieces are laid out on their own supersampled mask and
+        scaled down onto the receipt. The printer driver thresholds whatever
+        it is handed into pure black and white (escpos converts to mode "1"),
+        so the mask is thresholded here too rather than pasted with soft
+        edges -- what survives to paper is the accurate silhouette, not the
+        anti-aliasing."""
+        ss = self._CUTLERY_SS
+        w = self._cutlery_icon_w(h)
+        mask = Image.new('L', (round(w * ss), round(h * ss)), 0)
+        md = ImageDraw.Draw(mask)
         draw = {'fork': self._cutlery_fork, 'knife': self._cutlery_knife,
                 'spoon': self._cutlery_spoon}
-        x = right_x - self._cutlery_icon_w(h)
+        x = 0
         for name, frac in self._CUTLERY_PARTS:
-            piece_w = frac * h
-            draw[name](x + piece_w / 2, top, h, piece_w)
-            x += piece_w + self._CUTLERY_GAP * h
+            piece_w = frac * h * ss
+            draw[name](md, x + piece_w / 2, 0, h * ss, piece_w, 255, 0)
+            x += piece_w + self._CUTLERY_GAP * h * ss
+        mask = mask.resize((round(w), round(h)), Image.LANCZOS).point(lambda v: 255 if v >= 128 else 0)
+        self.img.paste(BLACK, (round(right_x - w), round(top)), mask)
 
     def cutlery_mark(self, gap_before=0, gap_after=0, height_mm=12):
         """The cutlery icon on its own, centered. Only called for an order
