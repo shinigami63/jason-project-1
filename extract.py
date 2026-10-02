@@ -16,6 +16,12 @@ COMMENT_PATTERN = re.compile(r'^message(.+)$')
 # icon off, otherwise the icon prints.
 NO_CUTLERY_PATTERN = re.compile(r'please\s+do\s+not\s+send\s+cutlery', re.IGNORECASE)
 
+# A sandwich's "Remove Ingredients" modifier shows up on the page as
+# "Remove Ingredients > Fresh Tomatoes" (preceded by a "post_add" icon line).
+# The removed ingredient becomes a "No Fresh Tomatoes" note on the item.
+REMOVE_PATTERN = re.compile(r'^(?:post_add\s*)?Remove\s+[\w\s]*?\s*[>:]\s*(.+)$', re.IGNORECASE)
+REMOVE_PREFIX = 'No '
+
 RAW_MEAT_ITEMS = {
     "raw kibbeh", "raw kebbeh", "kebbeh nayeh", "kibbeh nayeh",
     "raw tenderloin", "raw habra", "raw orfali", "raw liver",
@@ -352,6 +358,16 @@ def _items(lines):
                     break
                 if COMMENT_PATTERN.match(lines[j]):
                     # Collected above; a comment is never read as an add-on.
+                    continue
+                rm = REMOVE_PATTERN.search(lines[j])
+                if rm:
+                    # "Remove Ingredients > Fresh Tomatoes" -- the customer
+                    # wants it left out. Kept as a "No <ingredient>" note;
+                    # translate_add_ons() in receipt_server.py prints it as
+                    # "بدون <Arabic ingredient>". One line can list several.
+                    for part in re.split(r'\s*,\s*', rm.group(1).strip()):
+                        if part:
+                            add_ons_list.append(f'{REMOVE_PREFIX}{part}')
                     continue
                 m = re.search(r'(?:Choose|Add)\s+([\w\s]+?)\s*[>:]\s*(.+)', lines[j])
                 if not m:

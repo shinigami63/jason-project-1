@@ -242,6 +242,32 @@ DEFAULT_DICTIONARY = {
     "vine leaves in oil": "ورق عنب بالزيت",
     "water": "مياه",
     "yogurt": "لبن",
+    # Sandwiches
+    "kebbeh nayye sandwich": "سندويش كبة نية",
+    "kebbeh nayeh sandwich": "سندويش كبة نية",
+    "tebleh sandwich": "سندويش تابلة",
+    "kebbeh sandwich": "سندويش كبة",
+    "sajiyeh sandwich": "سندويش صاجية",
+    "taouk sandwich": "سندويش طاووق",
+    "lahme sandwich": "سندويش لحمة",
+    "kafta sandwich": "سندويش كفتة",
+    "makanek sandwich": "سندويش مقانق",
+    # Sandwich ingredients a customer can remove ("Remove Ingredients >
+    # Fresh Tomatoes" prints as "بدون بندورة"). Pickles and hummus are above.
+    "onions": "بصل",
+    "mint": "نعنع",
+    "olive oil": "زيت زيتون",
+    "garlic": "ثوم",
+    "radish": "فجل",
+    "pomegranate molasses": "دبس رمان",
+    "mouhamara": "محمرة",
+    "fresh tomatoes": "بندورة",
+    "tomatoes": "بندورة",
+    "fries": "بطاطا",
+    "garlic paste": "توم",
+    "grilled tomatoes": "بندورة مشوية",
+    "grilled onions": "بصل مشوي",
+    "biwaz": "بيواز",
     "monday": "الاثنين",
     "tuesday": "الثلاثاء",
     "wednesday": "الأربعاء",
@@ -791,10 +817,25 @@ def orders_report(date_from, date_to):
 # ── Translation ───────────────────────────────────────────────────────────────
 def translate_word(name):
     key = name.lower().strip()
-    return DICTIONARY.get(key, name)
+    # A custom dictionary file chosen in Settings doesn't get new default
+    # entries merged into it, so fall back to the built-in wording before
+    # falling back to the English.
+    return DICTIONARY.get(key) or DEFAULT_DICTIONARY.get(key, name)
+
+def translate_add_on(ao):
+    key = ao.lower().strip()
+    # A wording the user corrected by hand wins (auto-learned into
+    # PREFERENCES under the English it came from).
+    if key in PREFERENCES:
+        return PREFERENCES[key]
+    # "No Fresh Tomatoes" -- a removed ingredient (extract.REMOVE_PATTERN).
+    # The ingredient is looked up in the dictionary like any other word.
+    if key.startswith('no '):
+        return 'بدون ' + translate_word(ao.strip()[3:])
+    return ao
 
 def translate_add_ons(add_ons_list):
-    return [PREFERENCES.get(ao.lower().strip(), ao) for ao in (add_ons_list or [])]
+    return [translate_add_on(ao) for ao in (add_ons_list or [])]
 
 def translate_items(items):
     for item in items:
