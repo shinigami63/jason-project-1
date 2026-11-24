@@ -70,6 +70,14 @@
   .note-del:hover { color: var(--red); }
   .btn-add-note { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; padding: 8px 0; text-align: left; min-height: 36px; }
   .btn-add-note:hover { color: var(--red); }
+  .note-tr { background: #fff; border: 1.5px solid var(--border); border-radius: 6px; color: #333; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; height: 40px; width: 44px; flex-shrink: 0; }
+  .note-tr:hover { border-color: #111; }
+  .note-tr.on { background: #111; color: #fff; border-color: #111; }
+  .note-tr:disabled { opacity: .5; cursor: wait; }
+  .note-input[dir="rtl"] { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+  .btn-tr-all { display: none; background: #fff; color: #111; border: 1.5px solid var(--border); padding: 10px 16px; border-radius: 7px; font-size: 14px; font-weight: 700; cursor: pointer; margin-bottom: 8px; width: 100%; }
+  .btn-tr-all:hover { border-color: #111; }
+  .btn-tr-all:disabled { opacity: .5; cursor: wait; }
 
   /* ── Toolbar (History / Reports range picker) ──────────────────────────────── */
   .toolbar-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
@@ -250,6 +258,7 @@
     <div class="items-section" id="itemsSection">
       <div class="edit-hint">✏️ Click any field to edit &nbsp;|&nbsp; ✕ to remove item</div>
       <div class="meta-card" id="metaCard"></div>
+      <button class="btn-tr-all" id="trAllBtn" onclick="toggleAllComments()">🌐 Translate all comments</button>
       <div id="itemsList"></div>
       <button class="btn-add" onclick="addItem()">+ Add Item</button>
       <button class="btn btn-print" id="printBtn" onclick="printReceipt()">🖨️ Print Receipt</button>
@@ -532,6 +541,7 @@ function renderUI(data) {
   itemCount = 0;
   document.getElementById('itemsList').innerHTML = '';
   data.items.forEach(item => addItemRow(item));
+  updateTrAllBtn();
   document.getElementById('itemsSection').style.display = 'block';
 }
 
@@ -548,6 +558,91 @@ function noteRowHtml(value, original = null) {
     </div>`;
 }
 
+// A customer comment's row: the note input plus a button that flips it
+// between the customer's original words and Google's Arabic translation. Both
+// versions are kept on the row (data-en / data-ar) so flipping never refetches
+// and a hand edit to either version survives flipping back and forth. Whatever
+// the input shows when Print is pressed is what prints.
+function commentRowHtml(value) {
+  return `
+    <div class="note-row comment-row" data-en="${escHtml(value)}" data-showing="en">
+      <input type="text" class="note-input" placeholder="Kitchen note"
+             value="${escHtml(value)}">
+      <button class="note-tr" title="Translate to Arabic / back to original"
+              onclick="toggleComment(this.closest('.note-row'))">🌐</button>
+      <button class="note-del" onclick="this.closest('.note-row').remove(); updateTrAllBtn()">✕</button>
+    </div>`;
+}
+
+async function fetchTranslations(texts) {
+  const res = await fetch('/translate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texts })
+  });
+  const data = await res.json();
+  if (data.error) alert(data.error);
+  return data.translations || [];
+}
+
+function showComment(row, lang) {
+  const inp = row.querySelector('.note-input');
+  // Keep any edit the user made to the version on screen.
+  row.dataset[row.dataset.showing] = inp.value;
+  inp.value = row.dataset[lang];
+  inp.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  row.dataset.showing = lang;
+  // Same 🌐 icon both ways; filled black while the Arabic is showing.
+  row.querySelector('.note-tr').classList.toggle('on', lang === 'ar');
+}
+
+async function translateRows(rows) {
+  const need = rows.filter(r => r.dataset.ar === undefined);
+  if (need.length) {
+    const btns = need.map(r => r.querySelector('.note-tr'));
+    btns.forEach(b => b.disabled = true);
+    try {
+      // Translate the version on screen, so an edited comment is what's sent.
+      const texts = need.map(r => r.querySelector('.note-input').value.trim());
+      const out = await fetchTranslations(texts);
+      need.forEach((r, k) => { if (out[k]) r.dataset.ar = out[k]; });
+    } catch (e) {
+      alert('Could not reach the translator.');
+    } finally {
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+  rows.filter(r => r.dataset.ar !== undefined).forEach(r => showComment(r, 'ar'));
+}
+
+async function toggleComment(row) {
+  if (row.dataset.showing === 'ar') showComment(row, 'en');
+  else await translateRows([row]);
+  updateTrAllBtn();
+}
+
+// One click flips every comment: to Arabic if any is still showing the
+// original, otherwise all back to the original.
+async function toggleAllComments() {
+  const rows = [...document.querySelectorAll('#itemsList .comment-row')];
+  const btn = document.getElementById('trAllBtn');
+  if (rows.some(r => r.dataset.showing !== 'ar')) {
+    btn.disabled = true;
+    await translateRows(rows.filter(r => r.dataset.showing !== 'ar'));
+    btn.disabled = false;
+  } else {
+    rows.forEach(r => showComment(r, 'en'));
+  }
+  updateTrAllBtn();
+}
+
+function updateTrAllBtn() {
+  const rows = [...document.querySelectorAll('#itemsList .comment-row')];
+  const btn = document.getElementById('trAllBtn');
+  btn.style.display = rows.length ? 'block' : 'none';
+  btn.textContent = rows.length && rows.every(r => r.dataset.showing === 'ar')
+    ? '🌐 Show all comments in original' : '🌐 Translate all comments';
+}
+
 function addItemRow(item = null) {
   if (item?.is_bag_header) {
     const i = itemCount++;
@@ -560,7 +655,7 @@ function addItemRow(item = null) {
     div.dataset.bagSize = item.bag_size ?? 0;
     // A comment on the combo belongs to the whole bag, so it's edited on the
     // bag header and prints under the bag title.
-    const bagNotes = (item.comments ?? []).map(c => noteRowHtml(c)).join('');
+    const bagNotes = (item.comments ?? []).map(c => commentRowHtml(c)).join('');
     div.innerHTML = `
       <div class="bag-hd-card">${escHtml(item.arabic_name)}</div>
       <div class="item-notes bag-notes" id="notes${i}">
@@ -582,9 +677,9 @@ function addItemRow(item = null) {
 
   const addOnsHtml = addOns.map((ao, j) => noteRowHtml(ao, origAOs[j] ?? '')).join('');
 
-  // Customer comments are kept verbatim (no data-original → never auto-learned
-  // or translated). They render as their own note rows alongside add-ons.
-  const commentsHtml = comments.map(c => noteRowHtml(c)).join('');
+  // Customer comments arrive verbatim (no data-original → never auto-learned
+  // into the dictionary). Each gets its own translate button (commentRowHtml).
+  const commentsHtml = comments.map(c => commentRowHtml(c)).join('');
 
   const notesHtml = addOnsHtml + commentsHtml;
 

@@ -1196,6 +1196,54 @@ def reports_orders_print_route():
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 
+# ── Comment translation (Google Translate) ───────────────────────────────────
+# The translate buttons next to customer comments on the New Order page call
+# this. It uses Google Translate's free endpoint -- the one Chrome's built-in
+# translate uses -- so it needs no key and costs nothing. It isn't an official
+# API, though: Google can slow it down or change it, and it needs internet. A
+# comment Google doesn't answer for comes back as null and the page leaves the
+# English as it is, so a failure never blocks printing.
+_GOOGLE_TRANSLATE_URL = 'https://translate.googleapis.com/translate_a/single'
+_translation_cache = {}
+
+def google_translate(text, timeout=5):
+    """Any language → Arabic, or None if Google didn't answer."""
+    import urllib.request, urllib.parse
+    key = text.strip().lower()
+    if key in _translation_cache:
+        return _translation_cache[key]
+    query = urllib.parse.urlencode({'client': 'gtx', 'sl': 'auto', 'tl': 'ar',
+                                    'dt': 't', 'q': text})
+    req = urllib.request.Request(f'{_GOOGLE_TRANSLATE_URL}?{query}',
+                                 headers={'User-Agent': 'Mozilla/5.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        result = ''.join(p[0] for p in data[0] if p and p[0]).strip() or None
+    except Exception:
+        return None
+    if result:
+        _translation_cache[key] = result
+    return result
+
+@app.route('/translate', methods=['POST'])
+def translate_route():
+    texts = (request.json or {}).get('texts') or []
+    out = []
+    for t in texts:
+        t = str(t or '').strip()
+        # After one failure (no internet) skip the rest instead of waiting
+        # out a timeout for every comment.
+        tr = google_translate(t) if t else None
+        out.append(tr)
+        if t and tr is None:
+            out.extend([None] * (len(texts) - len(out)))
+            break
+    if texts and all(o is None for o in out):
+        return jsonify({'translations': out,
+                        'error': 'Google Translate did not answer — check the internet connection'}), 502
+    return jsonify({'translations': out})
+
 # ── Chrome extension endpoints ───────────────────────────────────────────────
 @app.route('/extension/parse', methods=['POST'])
 def extension_parse():
