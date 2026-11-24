@@ -70,7 +70,7 @@
   .note-del:hover { color: var(--red); }
   .btn-add-note { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; padding: 8px 0; text-align: left; min-height: 36px; }
   .btn-add-note:hover { color: var(--red); }
-  .note-tr { background: #fff; border: 1.5px solid var(--border); border-radius: 6px; color: #333; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0 10px; height: 40px; min-width: 52px; flex-shrink: 0; }
+  .note-tr { background: #fff; border: 1.5px solid var(--border); border-radius: 6px; color: #333; font-size: 18px; line-height: 1; cursor: pointer; padding: 0; height: 40px; width: 44px; flex-shrink: 0; }
   .note-tr:hover { border-color: #111; }
   .note-tr.on { background: #111; color: #fff; border-color: #111; }
   .note-tr:disabled { opacity: .5; cursor: wait; }
@@ -569,7 +569,7 @@ function commentRowHtml(value) {
       <input type="text" class="note-input" placeholder="Kitchen note"
              value="${escHtml(value)}">
       <button class="note-tr" title="Translate to Arabic / back to original"
-              onclick="toggleComment(this.closest('.note-row'))">AR</button>
+              onclick="toggleComment(this.closest('.note-row'))">🌐</button>
       <button class="note-del" onclick="this.closest('.note-row').remove(); updateTrAllBtn()">✕</button>
     </div>`;
 }
@@ -591,9 +591,8 @@ function showComment(row, lang) {
   inp.value = row.dataset[lang];
   inp.dir = lang === 'ar' ? 'rtl' : 'ltr';
   row.dataset.showing = lang;
-  const btn = row.querySelector('.note-tr');
-  btn.textContent = lang === 'ar' ? 'EN' : 'AR';
-  btn.classList.toggle('on', lang === 'ar');
+  // Same 🌐 icon both ways; filled black while the Arabic is showing.
+  row.querySelector('.note-tr').classList.toggle('on', lang === 'ar');
 }
 
 async function translateRows(rows) {
