@@ -124,6 +124,14 @@ icon, e.g. `messageفرمة ناعمة`) are now picked up and printed as their 
 note line under the item, kept verbatim with no translation. This only shows
 up once you are running a freshly built app.
 
+Each customer comment now has an **AR** button next to it that swaps it for
+Google Translate's Arabic (the button turns into **EN** to swap back), and a
+**🌐 Translate all comments** button above the items flips every comment at
+once. Whatever the box shows when you press Print is what prints. It uses
+Google's free translate endpoint: no key or account, but it needs internet and
+isn't an official Google API, so if it stops answering you get a message and
+the comments simply stay in English.
+
 A comment left on a **combo** (e.g. `messagePls send cutlery and bread` on a
 Kebbeh Zghertawiyeh Combo) used to be dropped, because a combo is expanded
 into its components and the comment belonged to none of them. It now rides on
