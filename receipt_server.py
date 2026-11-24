@@ -1203,46 +1203,60 @@ def reports_orders_print_route():
 # API, though: Google can slow it down or change it, and it needs internet. A
 # comment Google doesn't answer for comes back as null and the page leaves the
 # English as it is, so a failure never blocks printing.
-_GOOGLE_TRANSLATE_URL = 'https://translate.googleapis.com/translate_a/single'
+#
+# Two Google addresses are tried in turn, and if both fail the page tries the
+# first one again itself, from the app window's browser engine (see
+# fetchTranslations in ui.html) -- that has the same network access as Chrome
+# on the same PC, which can get through where Python's connection doesn't.
+_GOOGLE_HOSTS = ('https://translate.googleapis.com/translate_a/single',
+                 'https://translate.google.com/translate_a/single')
+_BROWSER_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+               '(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36')
 _translation_cache = {}
 
-def google_translate(text, timeout=5):
-    """Any language → Arabic, or None if Google didn't answer."""
+def _parse_google(data):
+    """Pulls the translated text out of Google's reply: [[["نص", "text", ...],
+    ...], ...] with one inner entry per sentence."""
+    return ''.join(p[0] for p in data[0] if p and p[0]).strip() or None
+
+def google_translate(text, timeout=6):
+    """Any language → Arabic. Returns (translation, None) or (None, reason)."""
     import urllib.request, urllib.parse
     key = text.strip().lower()
     if key in _translation_cache:
-        return _translation_cache[key]
+        return _translation_cache[key], None
     query = urllib.parse.urlencode({'client': 'gtx', 'sl': 'auto', 'tl': 'ar',
                                     'dt': 't', 'q': text})
-    req = urllib.request.Request(f'{_GOOGLE_TRANSLATE_URL}?{query}',
-                                 headers={'User-Agent': 'Mozilla/5.0'})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-        result = ''.join(p[0] for p in data[0] if p and p[0]).strip() or None
-    except Exception:
-        return None
-    if result:
-        _translation_cache[key] = result
-    return result
+    reason = None
+    for host in _GOOGLE_HOSTS:
+        req = urllib.request.Request(f'{host}?{query}',
+                                     headers={'User-Agent': _BROWSER_UA})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                result = _parse_google(json.loads(resp.read().decode('utf-8')))
+            if result:
+                _translation_cache[key] = result
+                return result, None
+            reason = 'Google sent back an empty answer'
+        except Exception as e:
+            reason = f'{type(e).__name__}: {e}'
+    return None, reason
 
 @app.route('/translate', methods=['POST'])
 def translate_route():
     texts = (request.json or {}).get('texts') or []
-    out = []
+    out, reason = [], None
     for t in texts:
         t = str(t or '').strip()
+        tr, err = google_translate(t) if t else (None, None)
+        out.append(tr)
         # After one failure (no internet) skip the rest instead of waiting
         # out a timeout for every comment.
-        tr = google_translate(t) if t else None
-        out.append(tr)
         if t and tr is None:
+            reason = err
             out.extend([None] * (len(texts) - len(out)))
             break
-    if texts and all(o is None for o in out):
-        return jsonify({'translations': out,
-                        'error': 'Google Translate did not answer — check the internet connection'}), 502
-    return jsonify({'translations': out})
+    return jsonify({'translations': out, 'error': reason})
 
 # ── Chrome extension endpoints ───────────────────────────────────────────────
 @app.route('/extension/parse', methods=['POST'])
