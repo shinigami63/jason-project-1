@@ -574,14 +574,47 @@ function commentRowHtml(value) {
     </div>`;
 }
 
-async function fetchTranslations(texts) {
-  const res = await fetch('/translate', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ texts })
-  });
+// Asks Google straight from this window -- the fallback when the app's own
+// (Python) connection to Google fails, since the window's browser engine
+// reaches the internet the same way Chrome does on this PC.
+async function browserTranslate(text) {
+  const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q='
+            + encodeURIComponent(text);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  if (data.error) alert(data.error);
-  return data.translations || [];
+  return data[0].map(p => p && p[0] ? p[0] : '').join('').trim() || null;
+}
+
+async function fetchTranslations(texts) {
+  let out = [], serverError = null;
+  try {
+    const res = await fetch('/translate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texts })
+    });
+    const data = await res.json();
+    out = data.translations || [];
+    serverError = data.error;
+  } catch (e) {
+    serverError = String(e);
+  }
+  let browserError = null;
+  for (let k = 0; k < texts.length; k++) {
+    if (out[k] || !texts[k]) continue;
+    try {
+      out[k] = await browserTranslate(texts[k]);
+    } catch (e) {
+      browserError = String(e);
+      break;
+    }
+  }
+  if (texts.some((t, k) => t && !out[k])) {
+    alert('Google Translate did not answer, so the comment stays as it is.\n\n'
+        + 'App: ' + (serverError || 'no answer') + '\n'
+        + 'Window: ' + (browserError || 'no answer'));
+  }
+  return out;
 }
 
 function showComment(row, lang) {
