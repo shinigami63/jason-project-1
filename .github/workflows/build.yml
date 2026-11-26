@@ -78,9 +78,13 @@ jobs:
       - name: Zip the app folder
         run: Compress-Archive -Path dist/KebzetZamen -DestinationPath dist/KebzetZamen-Windows.zip -Force
 
+      # Default-branch builds are already on the Releases page, so only other
+      # branches keep a copy on the run, and only for one day.
       - name: Upload build output
+        if: github.ref != 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: KebzetZamen-Windows
           path: |
             installer_out/KebzetZamenSetup.exe
